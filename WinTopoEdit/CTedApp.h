@@ -52,10 +52,6 @@ private:
 	CTedApp *m_pApp;
 };
 
-class CTedAppVideoWindowHandler {
-	CTedAppVideoWindowHandler(HWND hWndParent);
-};
-
 class CTedAppTopoEventHandler : public ITedTopoEventHandler {
 public:
 	CTedAppTopoEventHandler(CTedApp *pApp);
@@ -135,7 +131,7 @@ public:
 	CAtlString GetURL();
 
 protected:
-	LRESULT OnOk(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled)
+	LRESULT OnOk(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled);
 	BEGIN_MSG_MAP(CTedInputURLDialog)
 		COMMAND_HANDLER(IDOK, 0, OnOk)
 	END_MSG_MAP()
