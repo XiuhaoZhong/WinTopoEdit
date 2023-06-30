@@ -31,8 +31,8 @@
 *.out
 *.app
 
- .vs/
- WinTopoEdit/WinTopoEdit.vcxproj.filters
- WinTopoEdit/WinTopoEdit.vcxproj.user
- WinTopoUtil/WinTopoUtil.vcxproj.filters
- WinTopoUtil/WinTopoUtil.vcxproj.user
+.vs/
+WinTopoEdit/WinTopoEdit.vcxproj.filters
+WinTopoEdit/WinTopoEdit.vcxproj.user
+WinTopoUtil/WinTopoUtil.vcxproj.filters
+WinTopoUtil/WinTopoUtil.vcxproj.user
