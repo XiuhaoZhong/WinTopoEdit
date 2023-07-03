@@ -58,6 +58,20 @@ protected:
 	HRESULT CopyDesireAttributes(IMFMediaType *pSourceType, IMFAttributes *pTargetAttributes, const StringAttributeMap* pMap, size_t cMapElement);
 
 private:
+	const static LPCWSTR m_kszTranscodeProfileFile;
+	
+	const static StringGuidMap m_kaAudioSubTypeMap[];
+	const static StringGuidMap m_kaVideoSubTypeMap[];
+	const static StringGuidMap m_kaContainerMap[];
+
+	const static StringAttributeMap m_kaContainerAttributeMap[];
+	const static StringAttributeMap m_kaAudioAttributeMap[];
+	const static StringAttributeMap m_kaVideoAttributeMap[];
+
+	CAtlArray<CAtlStringW> m_arrProfileNames;
+	CInterfaceArray<IMFTranscodeProfile> m_arrProfiles;
+
+	CComPtr<IMFMediaSource> m_spSource;
 
 };
 

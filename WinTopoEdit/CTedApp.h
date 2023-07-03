@@ -43,7 +43,8 @@ private:
 
 class CTedAppMediaEventHandler : public CTedMediaEventHandler {
 public:
-	CTedAppMediaEventHandler();
+	CTedAppMediaEventHandler(CTedApp *pApp);
+	~CTedAppMediaEventHandler();
 
 	void NotifyEventError(HRESULT hr);
 	void HandleMediaEvent(IMFMediaEvent *pEvent);
@@ -58,7 +59,7 @@ public:
 	~CTedAppTopoEventHandler();
 
 	HRESULT STDMETHODCALLTYPE NotifyAddedNode(int nNodeID);
-	HRESULT STDMETHODCALLTYPE NotifyRemoveNode(int nNodeID);
+	HRESULT STDMETHODCALLTYPE NotifyRemovedNode(int nNodeID);
 	HRESULT STDMETHODCALLTYPE NotifyConnection(int nUpNodeID, int nDownNodeID);
 	HRESULT STDMETHODCALLTYPE NotifyDisconnection(int nUpNodeID, int nDownNodeID);
 
