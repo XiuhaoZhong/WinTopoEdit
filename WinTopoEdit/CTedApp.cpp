@@ -632,7 +632,7 @@ LRESULT CTedApp::OnCreate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandle
 	CHECK_ALLOC(m_pMediaEventHandler);
 
 	// create toolbar.
-	m_pMainToolBar = new CTedMainToolBar();;
+	m_pMainToolBar = new CTedMainToolBar();
 	CHECK_ALLOC(m_pMainToolBar);
 	IFC(m_pMainToolBar->Init(m_hWnd, MAIN_TOOLBAR_ID));
 	m_pMainToolBar->SetTrackbarScrollCallback(&HandleSeekerScrollFunc);
@@ -647,8 +647,249 @@ LRESULT CTedApp::OnCreate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandle
 
 	m_pDock = new CDock();
 	CHECK_ALLOC(m_pDock);
+	if (m_pDock->Create(m_hWnd, rect, LoadAtlString(IDS_DOCK), WS_CHILD | WS_CLIPCHILDREN | WS_VISIBLE) == NULL) {
+		hr = HRESULT_FROM_WIN32(GetLastError());
+		goto Cleanup;
+	}
+	ZeroMemory(&rect, sizeof(rect));
 
+	m_pSplitter = new CSplitterBar(m_pDock, false, m_hWnd);
+	CHECK_ALLOC(m_pSplitter);
+	if (m_pSplitter->Create(m_pDock->m_hWnd, &rect, LoadAtlString(IDS_SPLITTER), WS_CHILD | WS_CLIPSIBLINGS) == NULL) {
+		hr = HRESULT_FROM_WIN32(GetLastError());
+		goto Cleanup;
+	}
+
+	rect.top += 5;
+	CPropertyEditWindow *pPropView = new CPropertyEditWindow();
+	CHECK_ALLOC(pPropView);
+	if (pPropView->Create(m_pDock->m_hWnd, rect, LoadAtlString(IDS_PROP_VIEW), WS_CHILD | WS_BORDER | WS_VISIBLE) == NULL) {
+		hr = HRESULT_FROM_WIN32(GetLastError());
+		goto Cleanup;
+	}
+
+	m_pCPM = new CTedContentProtectionManager(this);
+	CHECK_ALLOC(m_pCPM);
+
+	m_pVideoWindowHandler = new CTedAppVideoWindowHandler(m_hWnd);
+	CHECK_ALLOC(m_pVideoWindowHandler);
+	m_pVideoWindowHandler->AddRef();
+
+	m_pTopoEventHandler = new CTedAppTopoEventHandler(this);
+	CHECK_ALLOC(m_pTopoEventHandler);
+	m_pTopoEventHandler->AddRef();
+
+	m_pPropertyController = new CPropertyController(pPropView);
+	CHECK_ALLOC(m_pPropertyController);
+	m_pPropertyController->AddRef();
+
+	IFC(TEDCreateTopoViewer(m_pVideoWindowHandler, m_pPropertyController, m_pTopoEventHandler, *m_pTopoView));
+	IFC(m_pTopoView->CreateTopoWindow(LoadAtlString(IDS_WDW_TOPOVIEW), WS_CHILD | WS_VISIBLE | WS_HSCROLL | WS_VSCROLL,
+		rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
+		(LONG_PTR)m_pDock->m_hWnd,
+		(LONG_PTR *)&m_hEditWnd));
+
+	m_EditWindow.Attach(m_hEditWnd);
+
+	HICON hIcon = ::LoadIcon(g_hInst, MAKEINTRESOURCE(IDI_TRV));
+	SetIcon(hIcon, TRUE);
+	SetIcon(hIcon, FALSE);
+
+	//EnableIput(ID_PLAY_PLAY, TRUE);
 
 Cleanup:
-	return hr;
+	return (LRESULT)hr;
+}
+
+LRESULT CTedApp::OnDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled) {
+	PostQuitMessage(0);
+
+	return 0;
+}
+
+LRESULT CTedApp::OnNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled) {
+	return 0;
+}
+
+LRESULT CTedApp::OnMediaCapabilitiesChanged(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled) {
+	DWORD dwCaps;
+	m_pPlayer->GetCapabilities(&dwCaps);
+
+	if (dwCaps & MFSESSIONCAP_SEEK) {
+		m_fCanSeek = true;
+	} else {
+		m_fCanSeek = false;
+	}
+
+	return 0;
+}
+
+LRESULT CTedApp::OnSize(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled) {
+	m_pMainToolBar->SetWindowPos(NULL, 0, 0, LOWORD(lParam), 30, SWP_NOZORDER | SWP_NOREDRAW);
+
+	m_pDock->SetWindowPos(NULL, 0, 30, LOWORD(lParam), HIWORD(lParam) - 30, SWP_NOZORDER | SWP_NOREDRAW);
+
+	return 0;
+}
+
+LRESULT CTedApp::OnSessionPlay(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled) {
+	HRESULT hr = (HRESULT)wParam;
+
+	KillTimer(ms_nTimerID);
+	if (SUCCEEDED(hr)) {
+		SetTimer(ms_nTimerID, ms_dwTimerLen, NULL);
+	}
+
+	m_fStopTrackingUintSeesionStarted = false;
+
+	return 0;
+}
+
+LRESULT CTedApp::OnTopologySet(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled) {
+	HRESULT hrTopologySet = (HRESULT)wParam;
+	HandleTopologySet(hrTopologySet);
+
+	return 0;
+}
+
+LRESULT CTedApp::OnTopologyReady(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled) {
+	HRESULT hr;
+	float flSlowest, flFastest;
+	hr = m_pPlayer->GetRateBounds(MFRATE_FORWARD, &flSlowest, &flFastest);
+
+	if (FAILED(hr) || flSlowest == 0.0f && flFastest = 0.0f) {
+		m_pMainToolBar->ShowRateBar(SW_HIDE);
+	} else {
+		m_pMainToolBar->ShowRateBar(SW_SHOW);
+		m_pMainToolBar->GetRateBar()->SetRange(DWORD(flSlowest * 10), DWORD(flFastest * 10));
+		m_pMainToolBar->GetRateBar()->SetPos(10);
+
+		m_pMainToolBar->GetRateBar()->SendMessage(TBM_CLEARTICS, 0, 0);
+		for (DWORD dwTipPos = 10; dwTipPos < flFastest * 10; dwTipPos += 10) {
+			m_pMainToolBar->GetRateBar()->SendMessageToDescendants(TBM_SETTIC, 0, dwTipPos);
+		}
+	}
+
+	return 0;
+}
+
+LRESULT CTedApp::OnSessionEnded(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled) {
+	m_pVideoWindowHandler->ShowWindows(SW_HIDE);
+
+	EnableInput(ID_PLAY_PLAY, TRUE);
+	EnableInput(ID_PLAY_STOP, FALSE);
+	EnableInput(ID_PLAY_PAUSE, FALSE);
+
+	MFTIME duration;
+	m_pPlayer->GetDuration(duration);
+
+	m_pMainToolBar->UpdateTimeDisplay(0, duration);
+
+	KillTimer(ms_nTimerID);
+
+	return 0;
+}
+
+LRESULT CTedApp::OnSplitterMoved(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled) {
+	if (wParam == ms_nTimerID) {
+		if (m_pPlayer->IsPlaying()) {
+			MFTIME time, duration;
+			HRESULT hr = m_pPlayer->GetTime(&time);
+			HRESULT hr2 = m_pPlayer->GetDuration(duration);
+
+			if (SUCCEEDED(hr) && SUCCEEDED(hr2) && !m_fStopTrackingUintSeesionStarted) {
+				m_pMainToolBar->UpdateTimeDisplay(time, duration);
+			}
+		}
+	}
+
+	SetTimer(ms_nTimerID, ms_dwTimerLen, NULL);
+	return 0;
+}
+
+LRESULT CTedApp::OnUntrustedComponent(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled) {
+	MessageBox(LoadAtlString(IDS_E_UNTRUSTED_COMPONENTS), NULL, MB_OK);
+
+	return 0;
+}
+
+LRESULT CTedApp::OnProtectedContent(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled) {
+	HRESULT hr = m_pCPM->ManualEnableContent();
+	if (FAILED(hr)) {
+		m_MFErrorHandler.HandleMFError(LoadAtlString(IDS_E_MANUAL_LICENSE), hr);
+	}
+
+	return 0;
+}
+
+LRESULT CTedApp::OnIndividualization(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled) {
+	HRESULT hr = m_pCPM->Individualize();
+	if (FAILED(hr)) {
+		m_MFErrorHandler.HandleMFError(LoadAtlString(IDS_E_PROT_CONTENT_PLAYBACK), hr);
+	}
+
+	return 0;
+}
+
+void CTedApp::HandleTopologySet(HRESULT hrTopologySet) {
+	assert(m_pPlayer != NULL);
+
+	CComPtr<IMFTopology> spFullTopo;
+	CAtlStringW strTime;
+
+	HRESULT hr = S_OK;
+	if (FAILED(hrTopologySet)) {
+		// we failed to set the topology; merge the old topology;
+		m_pTopoView->MergeTopology(m_pPendingTopo);
+
+		HandleMMError(LoadAtlString(IDS_E_TOPO_RESOLUTION), hrTopologySet);
+		m_fPendingPlay = false;
+		return;
+	}
+
+	if (m_fMergeRequired) {
+		hr = m_pPlayer->GetFullTopology(&spFullTopo);
+
+		if (spFullTopo != NULL) {
+			TOPOID TopoID = 0;
+			spFullTopo->GetTopologyID(&TopoID);
+
+			// Ensure this is the topology that was most recently set on the player
+			if (TopoID == m_PendingTopoID) {
+				m_fMergeRequired = false;
+				hr = m_pTopoView->MergeTopology(spFullTopo);
+				if (FAILED(hr)) {
+					HandleMMError(LoadAtlString(IDS_E_TOPO_MERGE), hr);
+				} else {
+					m_pMainToolBar->MarkResolved(true);
+					m_fResolved = true;
+				}
+
+				if (m_fPendingPlay) {
+					hr = Play();
+					if (FAILED(hr)) {
+						HandleMMError(LoadAtlString(IDS_E_TOPO_PLAY), hr);
+					}
+				}
+			}
+		} else {
+			HandleMMError(LoadAtlString(IDS_E_TOPO_RETRIEVE), hr);
+		}
+	}
+
+	MFTIME duration = 0;
+	m_pPlayer->GetDuration(duration);
+
+	m_pMainToolBar->UpdateTimeDisplay(0, duration);
+	m_fPendingPlay = false;
+}
+
+void CTedApp::EnableInput(UINT item, BOOL enabled) {
+	m_pMainToolBar->EnableButtonByCommand(item, enabled);
+	if (enabled) {
+		EnableMenuItem(m_hMenu, item, MF_ENABLED);
+	} else {
+		EnableMenuItem(m_hMenu, item, MF_GRAYED);
+	}
+
 }
