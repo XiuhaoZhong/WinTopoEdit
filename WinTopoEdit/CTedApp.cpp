@@ -1028,6 +1028,141 @@ LRESULT CTedApp::OnAddSource(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHa
 	return 0;
 }
 
+LRESULT CTedApp::OnAddSink(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	return 0;
+}
+
+LRESULT CTedApp::OnAddSAR(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	HRESULT hr = m_pTopoView->AddSAR();
+
+	if (FAILED(hr)) {
+		HandleMMError(LoadAtlString(IDS_E_AUDIO_RENDERER_CREATE), hr);
+	}
+
+	bHandled = TRUE;
+	return 0;
+}
+
+LRESULT CTedApp::OnAddEVR(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	HRESULT hr = m_pTopoView->AddEVR();
+
+	if (FAILED(hr)) {
+		HandleMMError(LoadAtlString(IDS_E_VIDEO_RENDERER_CREATE), hr);
+	}
+
+	bHandled = TRUE;
+	return 0;
+}
+
+LRESULT CTedApp::OnAddTransform(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	HRESULT hr = S_OK;
+
+	CTedTransformDialog transformDialog;
+	if (transformDialog.DoModal == IDOK) {
+		hr = m_pTopoView->AddTransformActivate(transformDialog.GetChosenActivate());
+	}
+
+	if (FAILED(hr)) {
+		HandleMMError(LoadAtlString(IDS_E_TRANSFORM_CREATE), hr);
+	}
+
+	bHandled = TRUE;
+	return 0;
+}
+
+LRESULT CTedApp::OnAddTree(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	HRESULT hr = m_pTopoView->AddTee();
+	if (FAILED(hr)) {
+		HandleMMError(LoadAtlString(IDS_E_TEE_CREATE), hr);
+	}
+
+	bHandled = TRUE;
+	return 0;
+}
+
+LRESULT CTedApp::OnAddCustomMFT(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	CTedInputGuidDialog dialog;
+	HRESULT hr = S_OK;
+	if (dialog.DoModal == IDOK) {
+		GUID gidTransID = dialog.GetInputGuid();
+		hr = m_pTopoView->AddTransform(gidTransID, LoadAtlString(IDS_MFT_CUSTOM));
+	}
+
+	if (FAILED(hr)) {
+		HandleMMError(LoadAtlString(IDS_E_TRANSFORM_CREATE), hr);
+	}
+
+	return 0;
+}
+
+LRESULT CTedApp::OnAddCustomSink(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	CTedInputGuidDialog dialog;
+	HRESULT hr = S_OK;
+
+	if (dialog.DoModal() == IDOK) {
+		GUID gidSinkID = dialog.GetInputGuid();
+		hr = m_pTopoView->AddCustomSink(gidSinkID);
+	}
+
+	if (FAILED(hr)) {
+		HandleMMError(LoadAtlString(IDS_E_SINK_CREATE), hr);
+	}
+
+	return 0;
+}
+
+LRESULT CTedApp::OnAddVideoCaptureSource(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	HRESULT hr = S_OK;
+	IMFMediaSource *pSource = NULL;
+	CTedCaptureSourceDialog dialog(true);
+
+	if (dialog.DoModal() == IDOK) {
+		IMFActivate* pActivate = dialog.GetSourceActivate();
+		if (pActivate) {
+			hr = pActivate->ActivateObject(IID_IMFMediaSource, (void **)&pSource);
+			if (SUCCEEDED(hr)) {
+				hr = m_pTopoView->AddCaptureSource(pSource);
+			}
+		}
+
+		if (pActivate) {
+			pActivate->Release();
+		}
+	}
+
+	if (FAILED(hr)) {
+		HandleMMError(LoadAtlString(IDS_E_VIDEO_CAP_SOURCE_CREATE), hr);
+	}
+
+	return 0;
+}
+
+LRESULT CTedApp::OnAddAudioCaptureSource(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	HRESULT hr = S_OK;
+	IMFMediaSource *pSource = NULL;
+	CTedCaptureSourceDialog dialog(false);
+
+	if (dialog.DoModal() == IDOK) {
+		IMFActivate *pActivate = dialog.GetSourceActivate();
+		if (pActivate) {
+			hr = pActivate->ActivateObject(IID_IMFMediaSource, (void **)&pSource);
+			if (SUCCEEDED(hr)) {
+				hr = m_pTopoView->AddCaptureSource(pSource);
+			}
+		}
+
+		if (pActivate) {
+			pActivate->Release();
+		}
+	}
+
+	if (FAILED(hr)) {
+		HandleMMError(LoadAtlString(IDS_E_AUDIO_CAP_SOURCE_CREATE));
+	}
+
+	return 0;
+}
+
 void CTedApp::EnableInput(UINT item, BOOL enabled) {
 	m_pMainToolBar->EnableButtonByCommand(item, enabled);
 	if (enabled) {
