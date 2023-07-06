@@ -884,6 +884,150 @@ void CTedApp::HandleTopologySet(HRESULT hrTopologySet) {
 	m_fPendingPlay = false;
 }
 
+LRESULT CTedApp::OnLoad(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	CAtlString strFilter = LoadAtlString(IDS_FILE_XML);
+	CAtlString strTitle = LoadAtlString(IDS_FILE_LOAD);
+	strFilter.SetAt(strFilter.GetLength() - 1, 0); // force double-null termination;
+	strTitle.SetAt(strTitle.GetLength() - 2, 0);
+
+	TCHAR fileBuffer[m_dwMaxAcceptedFileNameLength];
+	fileBuffer[0] = 0;
+
+	OPENFILENAME openFileInfo;
+	openFileInfo.lStructSize = sizeof(OPENFILENAME);
+	openFileInfo.hwndOwner = m_hWnd;
+	openFileInfo.hInstance = 0;
+	openFileInfo.lpstrFilter = strFilter;
+	openFileInfo.lpstrCustomFilter = NULL;
+	openFileInfo.nFilterIndex = 1;
+	openFileInfo.lpstrFile = fileBuffer;
+	openFileInfo.nMaxFile = m_dwMaxAcceptedFileNameLength;
+	openFileInfo.lpstrFileTitle = NULL;
+	openFileInfo.nMaxFileTitle = 0;
+	openFileInfo.lpstrInitialDir = NULL;
+	openFileInfo.lpstrTitle = strTitle;
+	openFileInfo.Flags = 0;
+	openFileInfo.nFileExtension = 0;
+	openFileInfo.lpstrDefExt = NULL;
+	openFileInfo.lCustData = NULL;
+	openFileInfo.pvReserved = NULL;
+	openFileInfo.dwReserved = 0;
+	openFileInfo.FlagsEx = 0;
+
+	if (GetOpenFileName(&openFileInfo)) {
+		LoadFile(openFileInfo.lpstrFile);
+	}
+
+	return 0;
+}
+
+LRESULT CTedApp::OnSave(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	CAtlString strFilter = LoadAtlString(IDS_FILE_XML);
+	CAtlString strTitle = LoadAtlString(IDS_FILE_SAVE);
+	strFilter.SetAt(strFilter.GetLength() - 1, 0);
+	strFilter.SetAt(strFilter.GetLength() - 2, 0);
+
+	TCHAR fileBuffer[m_dwMaxAcceptedFileNameLength];
+	fileBuffer[0] = 0;
+
+	OPENFILENAME openFileInfo;
+	openFileInfo.lStructSize = sizeof(OPENFILENAME);
+	openFileInfo.hwndOwner = m_hWnd;
+	openFileInfo.hInstance = 0;
+	openFileInfo.lpstrFilter = strFilter;
+	openFileInfo.lpstrCustomFilter = NULL;
+	openFileInfo.nFilterIndex = 1;
+	openFileInfo.lpstrFile = fileBuffer;
+	openFileInfo.nMaxFile = m_dwMaxAcceptedFileNameLength;
+	openFileInfo.lpstrFileTitle = NULL;
+	openFileInfo.nMaxFileTitle = 0;
+	openFileInfo.lpstrInitialDir = NULL;
+	openFileInfo.lpstrTitle = strTitle;
+	openFileInfo.Flags = 0;
+	openFileInfo.nFileOffset = 0;
+	openFileInfo.nFileExtension = 0;
+	openFileInfo.lpstrDefExt = L"XML";
+	openFileInfo.lCustData = NULL;
+	openFileInfo.pvReserved = NULL;
+	openFileInfo.dwReserved = 0;
+	openFileInfo.FlagsEx = 0;
+
+	if (GetSaveFileName(&openFileInfo)) {
+		HRESULT hr = m_pTopoView->SaveTopology(openFileInfo.lpstrFile);
+		if (FAILED(hr)) {
+			HandleMMError(LoadAtlString(IDS_E_FILE_SAVE), hr);
+		}
+	}
+
+	return 0;
+}
+
+LRESULT CTedApp::OnDelete(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	m_pTopoView->DeleteSelectedNode();
+
+	bHandled = TRUE;
+	return 0;
+}
+
+LRESULT CTedApp::OnNewTopology(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	BOOL fIsSaved = FALSE;
+	m_pTopoView->IsSaved(&fIsSaved);
+
+	if (!fIsSaved) {
+		int iMBResult = MessageBox(LoadAtlString(IDS_TOPO_NOT_SAVED), LoadAtlString(IDS_TOPO_NEW), MB_YESNO);
+		if (iMBResult == IDNO) {
+			return 0;
+		}
+	} 
+
+	m_pTopoView->NewTopology();
+	ResetInterface();
+
+	return 0;
+}
+
+LRESULT CTedApp::OnAddSource(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	CAtlString strFilter = LoadAtlString(IDS_FILE_MEDIA);
+	CAtlString strTitle = LoadAtlString(IDS_FILE_SELECT);
+	strFilter.SetAt(strFilter.GetLength() - 1, 0);
+	strFilter.SetAt(strFilter.GetLength() - 2, 0);
+
+	TCHAR fileBuffer[m_dwMaxAcceptedFileNameLength];
+	fileBuffer[0] = 0;
+
+	OPENFILENAME openFileInfo;
+	openFileInfo.lStructSize = sizeof(OPENFILENAME);
+	openFileInfo.hwndOwner = m_hWnd;
+	openFileInfo.hInstance = 0;
+	openFileInfo.lpstrFilter = strFilter;
+	openFileInfo.lpstrCustomFilter = NULL;
+	openFileInfo.nFilterIndex = 1;
+	openFileInfo.lpstrFile = fileBuffer;
+	openFileInfo.nMaxFile = m_dwMaxAcceptedFileNameLength;
+	openFileInfo.lpstrFileTitle = NULL;
+	openFileInfo.nMaxFileTitle = 0;
+	openFileInfo.lpstrInitialDir = NULL;
+	openFileInfo.lpstrTitle = strTitle;
+	openFileInfo.Flags = OFN_FILEMUSTEXIST;
+	openFileInfo.nFileOffset = 0;
+	openFileInfo.nFileExtension = 0;
+	openFileInfo.lpstrDefExt = NULL;
+	openFileInfo.lCustData = NULL;
+	openFileInfo.pvReserved = NULL;
+	openFileInfo.dwReserved = 0;
+	openFileInfo.FlagsEx = 0;
+
+	if (GetOpenFileName(&openFileInfo)) {
+		HRESULT hr = m_pTopoView->AddSource(openFileInfo.lpstrFile);
+		if (FAILED(hr)) {
+			HandleMMError(LoadAtlString(IDS_E_SOURCE_CREATE), hr);
+		}
+	}
+
+	bHandled = TRUE;
+	return 0;
+}
+
 void CTedApp::EnableInput(UINT item, BOOL enabled) {
 	m_pMainToolBar->EnableButtonByCommand(item, enabled);
 	if (enabled) {
