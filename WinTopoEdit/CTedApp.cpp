@@ -1163,6 +1163,311 @@ LRESULT CTedApp::OnAddAudioCaptureSource(WORD wNotifyCode, WORD wID, HWND hWndCt
 	return 0;
 }
 
+LRESULT CTedApp::OnLoadTopology(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	HRESULT hr = S_OK;
+	hr = ResolveTopologyFromEditor();
+	if (FAILED(hr)) {
+		HandleMMError(LoadAtlString(IDS_E_TOPO_RESOLUTION), hr);
+	}
+
+	bHandled = TRUE;
+	return 0;
+}
+
+LRESULT CTedApp::OnActionPlay(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	HRESULT hr = S_OK;
+
+	if (!m_fResolved) {
+		m_fResolved = true;
+		hr = ResolveTopologyFromEditor();
+		if (FAILED(hr)) {
+			m_fResolved = false;
+			HandleMMError(LoadAtlString(IDS_E_TOPO_RESOLUTION), hr);
+		}
+
+		return 0;
+	}
+
+	hr = Play();
+	if (FAILED(hr)) {
+		HandleMMError(LoadAtlString(IDS_E_TOPO_PLAY), hr);
+	}
+
+	bHandled = TRUE;
+	return 0;
+}
+
+LRESULT CTedApp::OnActionStop(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	HRESULT hr;
+
+	IFC(m_pPlayer->Stop());
+
+	m_pVideoWindowHandler->ShowWindows(SW_HIDE);
+	EnableInput(ID_PLAY_PLAY, TRUE);
+	EnableInput(ID_PLAY_STOP, FALSE);
+	EnableInput(ID_PLAY_PAUSE, FALSE);
+
+	MFTIME duration;
+	m_pPlayer->GetDuration(duration);
+	m_pMainToolBar->UpdateTimeDisplay(0, duration);
+
+	KillTimer(ms_nTimerID);
+
+Cleanup:
+	return 0;
+}
+
+LRESULT CTedApp::OnActionPause(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	HRESULT hr;
+
+	IFC(m_pPlayer->Pause());
+
+	EnableInput(ID_PLAY_PLAY, TRUE);
+	EnableInput(ID_PLAY_STOP, TRUE);
+	EnableInput(ID_PLAY_PAUSE, FALSE);
+
+Cleanup:
+	bHandled = TRUE;
+	return 0;
+}
+
+LRESULT CTedApp::OnSpy(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	HRESULT hr = m_pTopoView->SpySelectedNode();
+	if (FAILED(hr)) {
+		m_MFErrorHandler.HandleMFError(LoadAtlString(IDS_E_NODE_SPY), hr);
+	}
+
+	return 0;
+}
+
+LRESULT CTedApp::OnCustomTopoloader(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	CTedInputGuidDialog dialog;
+	HRESULT hr = S_OK;
+
+	if (dialog.DoModal() == IDOK && dialog.IsValidGuid()) {
+		CComPtr<IMFTopoLoader> spTopoLoader;
+		GUID gidTopoLoader = dialog.GetInputGuid();
+
+		// test creation of a topoloader with this CLSID to ensure it is valid, rather than
+		// fail when creating the session in a seemingly unrelated error.
+		hr = CoCreateInstance(gidTopoLoader, NULL, CLSCTX_INPROC_SERVER, IID_IMFTopoLoader, (void **)&spTopoLoader);
+		if (FAILED(hr)) {
+			HandleMMError(LoadAtlString(IDS_E_TOPOLOADER_CREATE), hr);
+		} else {
+			m_pPlayer->SetCustomTopoloader(gidTopoLoader);
+		}
+	}
+
+	return 0;
+}
+
+LRESULT CTedApp::OnExit(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	SendMessage(WM_CLOSE, 0, 0);
+}
+
+LRESULT CTedApp::OnHelpHelp(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	HINSTANCE hReturned = ShellExecute(NULL, L"open", L"http:go.microsoft.com/fwlink/?LinkId=92748", NULL, NULL, SW_SHOW);
+
+	if (hReturned <= HINSTANCE(32)) {
+		MessageBox(LoadAtlString(IDS_E_URL_OPEN), LoadAtlString(IDS_ERROR), MB_OK);
+	}
+
+	return 0;
+}
+
+LRESULT CTedApp::OnHelpAbout(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	CTedAboutDialog dialog;
+	dialog.DoModal();
+
+	return 0;
+}
+
+LRESULT CTedApp::OnRenderFile(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	HRESULT hr = S_OK;
+
+	CAtlString strFilter = LoadAtlString(IDS_FILE_MEDIA);
+	CAtlString strTitle = LoadAtlString(IDS_FILE_SELECT);
+	strFilter.SetAt(strFilter.GetLength() - 1, 0);
+	strFilter.SetAt(strFilter.GetLength() - 2, 0);
+
+	TCHAR fileBuffer[m_dwMaxAcceptedFileNameLength];
+	fileBuffer[0] = 0;
+
+	OPENFILENAME openFileInfo;
+	openFileInfo.lStructSize = sizeof(OPENFILENAME);
+	openFileInfo.hwndOwner = m_hWnd;
+	openFileInfo.hInstance = 0;
+	openFileInfo.lpstrFilter = strFilter;
+	openFileInfo.lpstrCustomFilter = NULL;
+	openFileInfo.nFilterIndex = 1;
+	openFileInfo.lpstrFile = fileBuffer;
+	openFileInfo.nMaxFile = m_dwMaxAcceptedFileNameLength;
+	openFileInfo.nMaxFileTitle = NULL;
+	openFileInfo.lpstrInitialDir = NULL;
+	openFileInfo.lpstrTitle = 0;
+	openFileInfo.lpstrTitle = strTitle;
+	openFileInfo.Flags = OFN_FILEMUSTEXIST;
+	openFileInfo.nFileOffset = 0;
+	openFileInfo.nFileExtension = 0;
+	openFileInfo.lpstrDefExt = NULL;
+	openFileInfo.lCustData = NULL;
+	openFileInfo.pvReserved = NULL;
+	openFileInfo.dwReserved = 0;
+	openFileInfo.FlagsEx = 0;
+
+	if (GetOpenFileName(&openFileInfo)) {
+		CComPtr<IMFTopology> spTopology;
+		CComPtr<IMFTopology> spTedTopo;
+
+		HRESULT hrConstructor;
+		CTedMediaFileRenderer TedMediaFileRenderer(openFileInfo.lpstrFile, m_pVideoWindowHandler, hrConstructor);
+		IFC(hrConstructor);
+		
+		IFC(TedMediaFileRenderer.Load(&spTopology));
+		IFC(m_pTopoView->ShowTopology(spTopology, openFileInfo.lpstrFile));
+
+		ResetInterface();
+
+		BOOL fIsProctected;
+		IFC(m_pTopoView->GetTopology(&spTopology, &fIsProctected));
+		IFC(SetTopologyOnPlayer(spTedTopo, fIsProctected, FALSE));
+	} else {
+		hr = HRESULT_FROM_WIN32(CommDlgExtendedError());
+	}
+
+Cleanup:
+	if (FALSE(hr)) {
+		HandleMMError(LoadAtlString(IDS_E_MEDIA_RENDER), hr);
+	}
+
+	return 0;
+}
+
+LRESULT CTedApp::OnRenderURL(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	HRESULT hr = S_OK;
+	CTedInputGuidDialog dialog;
+
+	if (dialog.DoModal() == IDOK) {
+		CComPtr<IMFTopology> spTopology;
+		CComPtr<IMFTopology> spTedTopo;
+
+		HRESULT hrConstructor;
+		CTedMediaFileRenderer TedMediaFileRenderer(dialog.GetURL(), m_pVideoWindowHandler, hrConstructor);
+		IFC(hrConstructor);
+
+		IFC(TedMediaFileRenderer.Load(&spTopology));
+		IFC(m_pTopoView->ShowTopology(spTopology, dialog.GetRUL()));
+
+		ResetInterface();
+
+		BOOL fIsProtected;
+		IFC(m_pTopoView->GetTopology(&spTopology, &fIsProtected));
+		IFC(SetTopologyOnPlayer(spTedTopo, fIsProtected, FALSE));
+	}
+
+Cleanup:
+	if (FAILED(hr)) {
+		HandleMMError(LoadAtlString(IDS_E_MEDIA_RENDER), hr);
+	}
+
+	return 0;
+}
+
+LRESULT CTedApp::OnRenderTranscode(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	HRESULT hr;
+	CComPtr<IMFTopology> spTopology;
+	CComPtr<IMFTopology> spTedTopo;
+
+	HRESULT hr = S_OK;
+	CComPtr<IMFTopology> spTopology;
+	CComPtr<IMFTopology> spTedTopo;
+	TCHAR fileBuffer[m_dwMaxAcceptedFileNameLength];
+	fileBuffer[0] = 0;
+
+	OPENFILENAME openFileInfo;
+	ZeroMemory(&openFileInfo, sizeof(OPENFILENAME));
+	openFileInfo.lStructSize = sizeof(OPENFILENAME);
+	openFileInfo.hwndOwner = m_hWnd;
+	openFileInfo.hInstance = 0;
+	openFileInfo.lpstrFilter = L"Media Files\0*.*\0";
+	openFileInfo.lpstrCustomFilter = NULL;
+	openFileInfo.nFilterIndex = 1;
+	openFileInfo.lpstrFile = fileBuffer;
+	openFileInfo.nMaxFile = m_dwMaxAcceptedFileNameLength;
+	openFileInfo.lpstrFileTitle = NULL;
+	openFileInfo.nMaxFileTitle = 0;
+	openFileInfo.lpstrInitialDir = NULL;
+	openFileInfo.lpstrTitle = L"Select Media Source";
+	openFileInfo.Flags = OFN_FILEMUSTEXIST;
+	openFileInfo.nFileOffset = 0;
+	openFileInfo.nFileExtension = 0;
+	openFileInfo.lpstrDefExt = NULL;
+	openFileInfo.lCustData = NULL;
+	openFileInfo.pvReserved = NULL;
+	openFileInfo.dwReserved = 0;
+	openFileInfo.FlagsEx = 0;
+
+	if (GetOpenFileName(&openFileInfo)) {
+		CTedChooserDialog ChooseDialog(L"Choose Transcode Profile");
+
+		CTedTranscodeTopologyBuilder Builder(openFileInfo.lpstrFile, &hr);
+		IFC(hr);
+
+		size_t cProfiles = Builder.GetProfileCount();
+		for (size_t i = 0; i < cProfiles; i++) {
+			ChooseDialog.AddProcessibleChoice(Builder.GetPropertyName(i));
+		}
+
+		if (ChooseDialog.DoModal() == IDOK) {
+			TCHAR fileBuffer2[m_dwMaxAcceptedFileNameLength];
+			fileBuffer2[0] = 0;
+
+			OPENFILENAME targetFileInfo;
+			targetFileInfo.lStructSize = sizeof(OPENFILENAME);
+			targetFileInfo.hwndOwner = m_hWnd;
+			targetFileInfo.hInstance = 0;
+			targetFileInfo.lpstrFilter = L"Media Files\0*.*\0";
+			targetFileInfo.lpstrCustomFilter = NULL;
+			targetFileInfo.nFilterIndex = 1;
+			targetFileInfo.lpstrFile = fileBuffer2;
+			targetFileInfo.nMaxFile = m_dwMaxAcceptedFileNameLength;
+			targetFileInfo.lpstrFileTitle = NULL;
+			targetFileInfo.nMaxFileTitle = 0;
+			targetFileInfo.lpstrInitialDir = NULL;
+			targetFileInfo.lpstrTitle = L"Choose target file";
+			targetFileInfo.Flags = OFN_OVERWRITEPROMPT;
+			targetFileInfo.nFileOffset = 0;
+			targetFileInfo.nFileExtension = 0;
+			targetFileInfo.lpstrDefExt = NULL;
+			targetFileInfo.lCustData = NULL;
+			targetFileInfo.pvReserved = NULL;
+			targetFileInfo.dwReserved = 0;
+			targetFileInfo.FlagsEx = 0;
+
+			if (GetSaveFileName(&targetFileInfo)) {
+				IFC(Builder.BuildTranscodeTopology(ChooseDialog.GetChoice(), targetFileInfo.lpstrFile, &spTopology));
+				IFC(m_pTopoView->ShowTopology(spTopology, openFileInfo.lpstrFile));
+
+				ResetInterface();
+
+				BOOL fIsProtected;
+				IFC(m_pTopoView->GetTopology(&spTedTopo, &fIsProtected));
+				IFC(SetTopologyOnPlayer(spTedTopo, fIsProtected, TRUE));
+			} else {
+				hr = HRESULT_FROM_WIN32(CommDlgExtendedError());
+			}
+		}
+	} else {
+		hr = HRESULT_FROM_WIN32(GetLastError());
+	}
+
+Cleanup:
+	if (FAILED(hr)) {
+		HandleMMError(L"Error rendering transcode topology", hr);
+	}
+	return 0;
+}
+
 void CTedApp::EnableInput(UINT item, BOOL enabled) {
 	m_pMainToolBar->EnableButtonByCommand(item, enabled);
 	if (enabled) {

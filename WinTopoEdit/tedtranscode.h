@@ -10,6 +10,7 @@ public:
 	~CTedTranscodeTopologyBuilder();
 
 	size_t GetPropertyCount();
+	size_t GetProfileCount();
 	CAtlStringW GetPropertyName(size_t iElement);
 
 	HRESULT BuildTranscodeTopology(const CAtlStringW &strProfileName, LPCWSTR szOutputFilePath, IMFTopology **ppTopology);
