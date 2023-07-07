@@ -56,6 +56,8 @@ public:
 
 		// runtime only. iteration for resize;
 		DWORD m_nResizer;
+
+		ATTACH m_Attach;
 	};
 
 	DWORD GetAreaCount();

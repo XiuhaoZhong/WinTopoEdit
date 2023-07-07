@@ -1475,5 +1475,161 @@ void CTedApp::EnableInput(UINT item, BOOL enabled) {
 	} else {
 		EnableMenuItem(m_hMenu, item, MF_GRAYED);
 	}
+}
 
+void CTedApp::RebuildDockWithOneView() {
+	m_pDock->RemoveAllAreas();
+
+	CDock::CArea* pEditArea = m_pDock->AddArea(CDock::MOVE_NO);
+	CDock::CArea* pPropertiesArea = m_pDock->AddArea(CDock::MOVE_NO);
+	CDock::CArea* pVerticalSplit = m_pDock->AddArea(CDock::MOVE_VERTICAL);
+
+	// Create the splitter between the properties view and the edit view.
+	pVerticalSplit->m_Attach.pTop = m_pDock->GetStockArea(CDock::STOCK_AREA_TOP);
+	pVerticalSplit->m_Attach.pBottom = m_pDock->GetStockArea(CDock::STOCK_AREA_BOTTOM);
+	pVerticalSplit->m_pWindow = m_pPropSpliiter;
+
+	pVerticalSplit->m_posFixed.left = m_dblInitalSplitterPos;
+	pVerticalSplit->m_posFixed.width = m_dwSplitterWidth;
+
+	// Create tht edit view.
+	pEditArea->m_Attach.pLeft = m_pDock->GetStockArea(CDock::STOCK_AREA_LEFT);
+	pEditArea->m_Attach.pRight = pVerticalSplit;
+	pEditArea->m_Attach.pTop = m_pDock->GetStockArea(CDock::STOCK_AREA_TOP);
+	pEditArea->m_Attach.pBottom = m_pDock->GetStockArea(CDock::STOCK_AREA_BOTTOM);
+	pEditArea->m_pWindow = &m_EditWindow;
+
+	// Create the properties view.
+	pPropertiesArea->m_Attach.pLeft = pVerticalSplit;
+	pPropertiesArea->m_Attach.pRight = m_pDock->GetStockArea(CDock::STOCK_AREA_RIGHT);
+	pPropertiesArea->m_Attach.pTop = m_pDock->GetStockArea(CDock::STOCK_AREA_TOP);
+	pPropertiesArea->m_Attach.pBottom = m_pDock->GetStockArea(CDock::STOCK_AREA_BOTTOM);
+	pPropertiesArea->m_pWindow = m_pPropertyController->GetWindow();
+
+	m_pPropSpliiter->ShowWindow(SW_SHOW);
+	m_pPropertyController->GetWindow()->ShowWindow(SW_SHOW);
+	m_pSplitter->ShowWindow(SW_HIDE);
+
+	m_pDock->UpdateDock();
+}
+
+void CTedApp::DisablePlayback() {
+	EnableInput(ID_PLAY_PLAY, FALSE);
+	EnableInput(ID_PLAY_STOP, FALSE);
+	EnableInput(ID_PLAY_PAUSE, FALSE);
+}
+
+HRESULT CTedApp::HasBuggedPins(IMFTopology* pTopology, bool *fBuggedPins) {
+	HRESULT hr;
+	*fBuggedPins = false;
+	WORD cNodes;
+	IFC(pTopology->GetNodeCount(&cNodes));
+
+	for (WORD i = 0; i < cNodes && !(*fBuggedPins); i++) {
+		CComPtr<IMFTopologyNode> spNode;
+		IFC(pTopology->GetNode(i, &spNode));
+
+		DWORD cInputs;
+		IFC(spNode->GetInputCount(&cInputs));
+		for (DWORD j = 0; j < cInputs; j++) {
+			CComPtr<IMFTopologyNode> spUpNode;
+			DWORD dwUpIndex;
+			HRESULT hrPin = spNode->GetInput(j, &spUpNode, &dwUpIndex);
+			if (FAILED(hrPin)) {
+				*fBuggedPins = true;
+				break;
+			}
+		}
+
+		if (!(*fBuggedPins)) {
+			DWORD cOutputs;
+			IFC(spNode->GetOutputCount(&cOutputs));
+			for (DWORD j = 0; j < cOutputs; j++) {
+				CComPtr<IMFTopologyNode> spDownNode;
+				DWORD dwDownIndex;
+				HRESULT hrPin = spNode->GetOutput(j, &spDownNode, &dwDownIndex);
+				if (FAILED(hrPin)) {
+					*fBuggedPins = true;
+					break;
+				}
+			}
+		}
+	}
+
+Cleanup:
+	return hr;
+}
+
+void CTedApp::ResetInterface() {
+	if (m_pPlayer && m_pPlayer->IsPlaying()) {
+		m_pPlayer->Stop();
+	}
+
+	m_pMainToolBar->UpdateTimeDisplay(0, 0);
+	m_pMainToolBar->ShowRateBar(SW_HIDE);
+	m_pMainToolBar->MarkResolved(false);
+	m_fResolved = false;
+}
+
+HRESULT CTedApp::ResolveTopologyFromEditor() {
+	HRESULT hr;
+	BOOL fIsProtected;
+
+	CComPtr<IMFTopology> spTopo;
+	IFC(m_pTopoView->GetTopology(&spTopo, &fIsProtected));
+
+	// WORKAROUND: Currently, disconnected pins are bugged in media foundation.
+	// The pin is disconnected, but the node will still have an input/output count
+	// of one. When trying to resolve a topology with a bugged pin like this, the
+	// topoloader will create a work item with a 'NULL' destination node.
+	// Exexuting this work item causes E_POINTER to be returned to the client.
+	// Since E_POINTER make little sense from the context of the UI, handle
+	// this issue here.
+	bool fHasBuggedPins;
+	IFC(HasBuggedPins(spTopo, &fHasBuggedPins));
+	if (fHasBuggedPins) {
+		MessageBox(LoadAtlString(IDS_E_TOPO_RESOLUTION_PINS), LoadAtlString(IDS_ERROR), MB_OK);
+		goto Cleanup;
+	}
+
+	IFC(SetTopologyOnPlayer(spTopo, fIsProtected, FALSE));
+
+Cleanup:
+	return hr;
+}
+
+HRESULT CTedApp::SetTopologyOnPlayer(IMFTopology* pTopo, BOOL fIsProtected, BOOL fIsTranscode) {
+	HRESULT hr;
+
+	if (m_pPendingTopo) {
+		m_pPendingTopo->Release();
+	}
+
+	m_pPendingTopo = pTopo;
+	m_pPendingTopo->AddRef();
+	m_pPendingTopo->GetTopologyID(&m_PendingTopoID);
+
+	if (fIsProtected) {
+		hr = m_pPlayer->InitProtected();
+	} else {
+		hr = m_pPlayer->InitClear();
+	}
+
+	if (SUCCEEDED(hr)) {
+		hr = m_pPlayer->SetTopology(pTopo, fIsTranscode);
+		if (FAILED(hr)) {
+			if (hr == MF_E_NOT_FOUND) {
+				MessageBox(LoadAtlString(IDS_E_TOPO_RESOLUTION_NO_SOURCE), LoadAtlString(IDS_ERROR), MB_OK);
+				hr = S_OK;
+				m_fPendingPlay = false;
+			}
+
+			goto Cleanup;
+		}
+
+		m_fMergeRequired = true;
+	}
+
+Cleanup:
+	return hr;
 }
