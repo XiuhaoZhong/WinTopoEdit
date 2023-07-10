@@ -8,6 +8,9 @@ HINSTANCE g_hInst = NULL;
 HINSTANCE g_hTedUtilInst = NULL;
 CTedApp *g_pApp;
 
+void HandleSeekerScrollFunc(WORD wPos);
+void HandleRateScrollFunc(WORD wPos);
+
 HRESULT InitTedApp(LPCWSTR lpCmdLine, int nCmdShow) {
 	HRESULT hr = S_OK;
 
@@ -72,5 +75,12 @@ BOOL WINAPI wWinMain(__in HINSTANCE hInstance,
 Cleanup:
 	assert(SUCCEEDED(hr));
 	return FALSE;
+}
 
+void HandleSeekerScrollFunc(WORD wPos) {
+	g_pApp->HandleSeekerScroll(wPos);
+}
+
+void HandleRateScrollFunc(WORD wPos) {
+	g_pApp->HandleRateScroll(wPos);
 }

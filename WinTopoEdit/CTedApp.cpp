@@ -757,7 +757,7 @@ LRESULT CTedApp::OnTopologyReady(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &
 	float flSlowest, flFastest;
 	hr = m_pPlayer->GetRateBounds(MFRATE_FORWARD, &flSlowest, &flFastest);
 
-	if (FAILED(hr) || flSlowest == 0.0f && flFastest = 0.0f) {
+	if (FAILED(hr) || flSlowest == 0.0f && flFastest == 0.0f) {
 		m_pMainToolBar->ShowRateBar(SW_HIDE);
 	} else {
 		m_pMainToolBar->ShowRateBar(SW_SHOW);
@@ -1157,7 +1157,7 @@ LRESULT CTedApp::OnAddAudioCaptureSource(WORD wNotifyCode, WORD wID, HWND hWndCt
 	}
 
 	if (FAILED(hr)) {
-		HandleMMError(LoadAtlString(IDS_E_AUDIO_CAP_SOURCE_CREATE));
+		HandleMMError(LoadAtlString(IDS_E_AUDIO_CAP_SOURCE_CREATE), hr);
 	}
 
 	return 0;
@@ -1345,7 +1345,7 @@ Cleanup:
 
 LRESULT CTedApp::OnRenderURL(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
 	HRESULT hr = S_OK;
-	CTedInputGuidDialog dialog;
+	CTedInputURLDialog dialog;
 
 	if (dialog.DoModal() == IDOK) {
 		CComPtr<IMFTopology> spTopology;
@@ -1356,7 +1356,7 @@ LRESULT CTedApp::OnRenderURL(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHa
 		IFC(hrConstructor);
 
 		IFC(TedMediaFileRenderer.Load(&spTopology));
-		IFC(m_pTopoView->ShowTopology(spTopology, dialog.GetRUL()));
+		IFC(m_pTopoView->ShowTopology(spTopology, dialog.GetURL()));
 
 		ResetInterface();
 
@@ -1628,8 +1628,45 @@ HRESULT CTedApp::SetTopologyOnPlayer(IMFTopology* pTopo, BOOL fIsProtected, BOOL
 		}
 
 		m_fMergeRequired = true;
+	} else {
+		HandleMMError(LoadAtlString(IDS_E_TOPO_RESOLUTION_INIT), hr);
+		hr = S_OK;
 	}
 
 Cleanup:
 	return hr;
 }
+
+HRESULT CTedApp::Play() {
+	HRESULT hr;
+
+	m_pVideoWindowHandler->ShowWindows(SW_SHOW);
+
+	if (m_fCanSeek) {
+		MFTIME duration;
+		WORD wPos = m_pMainToolBar->GetSeekBar()->GetPos();
+
+		IFC(m_pPlayer->GetDuration(duration));
+		MFTIME seekTime = (wPos * duration) / m_nSeekerRange;
+		IFC(m_pPlayer->PlayFrom(seekTime));
+	} else {
+		IFC(m_pPlayer->Start());
+	}
+
+	EnableInput(ID_PLAY_PLAY, FALSE);
+	EnableInput(ID_PLAY_STOP, TRUE);
+	EnableInput(ID_PLAY_PAUSE, TRUE);
+
+	SetTimer(ms_nTimerID, ms_dwTimerLen, NULL);
+
+Cleanup:
+	return hr;
+}
+
+void CTedApp::LoadFile(LPCWSTR szFile) {
+	HRESULT hr = m_pTopoView->LoadTopology(szFile);
+	if (FALSE(hr)) {
+		HandleMMError(LoadAtlString(IDS_E_FILE_LOAD_XML), hr);
+	}
+}
+

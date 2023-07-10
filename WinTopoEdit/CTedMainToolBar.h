@@ -32,15 +32,15 @@ public:
 	DECLARE_WND_SUPERCLASS(NULL, TOOLBARCLASSNAME)
 
 protected:
-	LRESULT OnCreate(UINT uMsg, WPARAM wParam, LPARAM lParam, bool &bHandled);
-	virtual LRESULT OnVScroll(UINT uMsg, WPARAM wParam, LPARAM lParam, bool &bHandled);
-	virtual LRESULT OnHScorll(UINT uMsg, WPARAM wParam, LPARAM lParam, bool &bHandled);
+	LRESULT OnCreate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
+	virtual LRESULT OnVScroll(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
+	virtual LRESULT OnHScorll(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
 
-	BEGIN_MESSAGE_MAP(CTedMainToolBar)
+	BEGIN_MSG_MAP(CTedMainToolBar)
 		MESSAGE_HANDLER(WM_CREATE, OnCreate)
 		MESSAGE_HANDLER(WM_VSCROLL, OnVScroll)
 		MESSAGE_HANDLER(WM_HSCROLL, OnHScorll)
-	END_MESSAGE_MAP()
+	END_MSG_MAP()
 
 private:
 	TBBUTTON m_buttons[3];

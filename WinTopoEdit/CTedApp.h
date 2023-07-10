@@ -355,6 +355,4 @@ private:
 	HWND m_hwnd;
 };
 
-void HandleSeekerScrollFunc(WORD wPos);
-void HandleRateScrollFunc(WORD wPos);
 
