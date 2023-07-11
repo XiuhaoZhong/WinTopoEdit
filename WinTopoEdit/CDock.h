@@ -55,13 +55,13 @@ public:
 		BOOL  m_fLocked;
 
 		// runtime only. iteration for resize;
-		DWORD m_nResizer;
+		DWORD m_nResizeIter;
 
 		ATTACH m_Attach;
 	};
 
 	DWORD GetAreaCount();
-	CArea *GeArea(DWORD n);
+	CArea *GetArea(DWORD n);
 	CArea *AddArea(AREA_MOVE_TYPE type);
 	CArea *GetStockArea(STOCK_AREA AreaType);
 

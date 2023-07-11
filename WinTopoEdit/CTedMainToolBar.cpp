@@ -51,6 +51,10 @@ void CTedMainToolBar::EnableButton(int nID, BOOL fEnable) {
 	SendMessage(TB_ENABLEBUTTON, m_buttons[nID].idCommand, MAKELONG(fEnable, 0));
 }
 
+void CTedMainToolBar::EnableButtonByCommand(UINT nID, BOOL fEnable) {
+	SendMessage(TB_ENABLEBUTTON, nID, MAKELONG(fEnable, 0));
+}
+
 void CTedMainToolBar::SetTrackbarScrollCallback(HANDLESCROLLPROC scrollCallback) {
 	m_trackBar.SetScrollCallback(scrollCallback);
 }
@@ -169,7 +173,7 @@ LRESULT CTedMainToolBar::OnCreate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL 
 
 	rect.left = rect.right += m_iMarginSize;
 	rect.right = rect.left + m_iRateLabelWidth;
-	m_rateLabel.ExecuteDlgInit(m_hWnd, rect, true, true);
+	m_rateBar.Init(m_hWnd, rect, true, true);
 
 	rect.left = rect.right += m_iMarginSize;
 	rect.right = rect.left + m_iResolvedLabelWidth;
@@ -178,3 +182,25 @@ LRESULT CTedMainToolBar::OnCreate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL 
 
 	return 0;
  }
+
+LRESULT CTedMainToolBar::OnVScroll(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled) {
+	HWND hFocused = ::GetFocus();
+	if (hFocused == m_trackBar.m_hWnd) {
+		m_trackBar.HandleScroll(LOWORD(wParam), HIWORD(wParam));
+	} else {
+		m_rateBar.HandleScroll(LOWORD(wParam), HIWORD(wParam));
+	}
+
+	return 0;
+}
+
+LRESULT CTedMainToolBar::OnHScorll(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled) {
+	HWND hFocused = ::GetFocus();
+	if (hFocused == m_trackBar.m_hWnd) {
+		m_trackBar.HandleScroll(LOWORD(wParam), HIWORD(wParam));
+	} else {
+		m_rateBar.HandleScroll(LOWORD(wParam), HIWORD(wParam));
+	}
+
+	return 0;
+}

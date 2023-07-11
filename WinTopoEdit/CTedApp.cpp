@@ -569,7 +569,7 @@ HRESULT CTedApp::Init(LPCWSTR lpCmdLine) {
 
 Cleanup:
 	if (FAILED(hr)) {
-		HandleMMError(LoadAtlString(IDS_E_APP_INIT));
+		HandleMMError(LoadAtlString(IDS_E_APP_INIT), hr);
 	}
 	return hr;
 }
