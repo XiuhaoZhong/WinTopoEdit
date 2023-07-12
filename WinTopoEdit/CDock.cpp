@@ -154,3 +154,53 @@ void CDock::ResizeDock(long nWidth, long nHeight) {
 		}
 	}
 }
+
+void CDock::ResizePane(CDock::CArea *pArea) {
+	if (pArea->m_Attach.pLeft) {
+		pArea->m_rc.left = pArea->m_Attach.pLeft->m_rc.right;
+	}
+
+	if (pArea->m_Attach.pRight) {
+		pArea->m_rc.right = pArea->m_Attach.pRight->m_rc.left;
+	}
+
+	if (pArea->m_Attach.pTop) {
+		pArea->m_rc.top = pArea->m_Attach.pTop->m_rc.bottom;
+	}
+
+	if (pArea->m_Attach.pBottom) {
+		pArea->m_rc.bottom = pArea->m_Attach.pBottom->m_rc.top;
+	}
+}
+
+BOOL CDock::CanResize(CDock::CArea * pArea) {
+	if (pArea->m_Attach.pLeft && pArea->m_Attach.pLeft->m_nResizeIter >= pArea->m_nResizeIter) {
+		return FALSE;
+	}
+
+	if (pArea->m_Attach.pRight && pArea->m_Attach.pRight->m_nResizeIter >= pArea->m_nResizeIter) {
+		return FALSE;
+	}
+
+	if (pArea->m_Attach.pTop && pArea->m_Attach.pTop->m_nResizeIter >= pArea->m_nResizeIter) {
+		return FALSE;
+	}
+
+	if (pArea->m_Attach.pBottom && pArea->m_Attach.pBottom->m_nResizeIter >= pArea->m_nResizeIter) {
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+LRESULT CDock::OnCreate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled) {
+	bHandled = TRUE;
+	return 0;
+}
+
+LRESULT CDock::OnSize(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled) {
+	ResizeDock(LOWORD(lParam), HIWORD(lParam));
+	bHandled = TRUE;
+
+	return 0;
+}
