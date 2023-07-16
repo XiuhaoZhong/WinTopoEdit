@@ -36,6 +36,9 @@
 #include <Mferror.h>
 #include <mftransform.h>
 
+#include <CommCtrl.h>
+#include <wmcontainer.h>
+
 #include "resource.h"
 
 ///////////////////////////////////////////////////////////////////////////////
