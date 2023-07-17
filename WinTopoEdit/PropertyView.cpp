@@ -383,3 +383,95 @@ Cleanup:
 	CoTaskMemFree(szName);
 	return hr;
 }
+
+HRESULT CPropertyEditWindow::CreatePropertyInterfaceForIndex(DWORD dwPropertyInfoIndex, DWORD dwIndex, RECT &labelRect) {
+	HRESULT hr = S_OK;
+
+	LPWSTR strName = NULL;
+	LPWSTR strValue = NULL;
+	VARTYPE vt;
+
+	ITedPropertyInfo* pPropertyInfo = m_arrPropertyInfo[dwPropertyInfoIndex];
+	PropertyInfoDisplay* pDisplay = m_arrPropertyInfoDisplay[dwPropertyInfoIndex];
+
+	RECT clientRect;
+	GetClientRect(&clientRect);
+	DWORD dwViewWidth = clientRect.right - clientRect.left - ms_MarginWidth;
+
+	IFC(pPropertyInfo->GetProperty(dwIndex, &strName, &strValue));
+	IFC(pPropertyInfo->GetPropertyType(dwIndex, &vt));
+	IFC(CreatePropertyLabel(dwPropertyInfoIndex, strName, labelRect));
+
+	labelRect.left = labelRect.right + ms_MarginWidth;
+	labelRect.right = dwViewWidth - ms_MarginWidth;
+
+	bool fReadOnly = false;
+	if (vt == VT_EMPTY || vt == VT_UNKNOWN || vt == (VT_VECTOR | VT_UI1)) {
+		fReadOnly = true;
+	}
+
+	IFC(CreatePropertyEdit(dwPropertyInfoIndex, strValue, labelRect, fReadOnly));
+
+	RECT rectEditClient;
+	CEdit* pEditWnd = pDisplay->m_arrEdits.GetAt(pDisplay->m_arrEdits.GetCount() - 1);
+	pEditWnd->GetClientRect(&rectEditClient);
+	IFC(CreatePropertyToolTip(dwPropertyInfoIndex, pEditWnd->m_hWnd, GetTextForVartype(vt), rectEditClient));
+	pEditWnd->SetToolTipControl(pDisplay->m_arrTooltips.GetAt(pDisplay->m_arrTooltips.GetCount() - 1));
+
+	m_arrPropertyInfoDisplay[dwPropertyInfoIndex]->m_arrVartypes.Add(vt);
+
+	labelRect.left = ms_MarginWidth;
+	labelRect.right = labelRect.left + dwViewWidth / 2;
+	labelRect.top += ms_LabelHeight;
+	labelRect.bottom += ms_LabelHeight;
+
+	m_lastRect = labelRect;
+
+Cleanup:
+	if (strName) {
+		CoTaskMemFree(strName);
+	}
+
+	if (strValue) {
+		CoTaskMemFree(strValue);
+	}
+
+	// If there was a failure, roll back changes to the property displays;
+	if (FAILED(hr)) {
+		PropertyInfoDisplay* pDisplay = m_arrPropertyInfoDisplay[dwPropertyInfoIndex];
+		if (pDisplay->m_arrVartypes.GetCount() < pDisplay->m_arrEdits.GetCount()) {
+			DWORD dwIndex = DWORD(pDisplay->m_arrEdits.GetCount() - 1);
+			pDisplay->m_arrEdits[dwIndex]->DestroyWindow();
+			delete pDisplay->m_arrEdits[dwIndex];
+			pDisplay->m_arrEdits.RemoveAt(pDisplay->m_arrEdits.GetCount() - 1);
+		}
+
+		if (pDisplay->m_arrVartypes.GetCount() < pDisplay->m_arrTooltips.GetCount()) {
+			pDisplay->m_arrTooltips.RemoveAt(pDisplay->m_arrTooltips.GetCount() - 1);
+		}
+
+		if (pDisplay->m_arrVartypes.GetCount() < pDisplay->m_arrLabels.GetCount()) {
+			DWORD dwIndex = DWORD(pDisplay->m_arrLabels.GetCount() - 1);
+			pDisplay->m_arrLabels[dwIndex]->DestroyWindow();
+			delete pDisplay->m_arrLabels[dwIndex];
+			pDisplay->m_arrLabels.RemoveAt(pDisplay->m_arrLabels.GetCount() - 1);
+		}
+
+		labelRect = m_lastRect;
+	}
+
+	return hr;
+}
+
+HRESULT CPropertyEditWindow::CreatePropertyLabel(DWORD dwPropertyInfoIndex, CAtlStringW strLabelText, RECT &rectLabel) {
+	HRESULT hr = S_OK;
+
+	CStatic* pStatic = new CStatic();
+	CHECK_ALLOC(pStatic);
+	pStatic->Create(m_hWnd, &rectLabel, strLabelText, WS_CHILD | WS_VISIBLE);
+	pStatic->SetFont(m_hLabelFont);
+	m_arrPropertyInfoDisplay[dwPropertyInfoIndex]->m_arrLabels.Add(pStatic);
+
+Cleanup:
+	return hr;
+}
