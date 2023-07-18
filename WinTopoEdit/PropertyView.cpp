@@ -475,3 +475,96 @@ HRESULT CPropertyEditWindow::CreatePropertyLabel(DWORD dwPropertyInfoIndex, CAtl
 Cleanup:
 	return hr;
 }
+
+HRESULT CPropertyEditWindow::CreatePropertyEdit(DWORD dwPropertyInfoIndex, CAtlStringW strInitialText, RECT &rectLabel, bool fReadOnly) {
+	HRESULT hr = S_OK;
+
+	CEdit* pEdit = new CEdit();
+	CHECK_ALLOC(pEdit);
+
+	DWORD dwStyle = WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL;
+	if (fReadOnly) {
+		dwStyle |= ES_READONLY;
+	}
+
+	pEdit->Create(m_hWnd, &rectLabel, strInitialText, dwStyle);
+	pEdit->SetFont(m_hLabelFont);
+	m_arrPropertyInfoDisplay[dwPropertyInfoIndex]->m_arrEdits.Add(pEdit);
+
+Cleanup:
+	return hr;
+}
+
+HRESULT CPropertyEditWindow::CreatePropertyToolTip(DWORD dwPropertyInfoIndex, HWND hWndParent, CAtlStringW strLabelText, RECT &rectTooltip) {
+	HRESULT hr = S_OK;
+
+	CToolTipControl* pToolTip = new CToolTipControl();
+	CHECK_ALLOC(pToolTip);
+
+	if (pToolTip->Create(hWndParent, rectTooltip, NULL, WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP, WS_EX_TOPMOST) == NULL) {
+		assert(!L"Failed to create tooltip window");
+		IFC(E_FAIL);
+	}
+
+	pToolTip->SetWindowPos(HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+	pToolTip->SendMessage(TTM_ACTIVATE, TRUE, 0);
+	pToolTip->AddTool(hWndParent, strLabelText, rectTooltip, 0);
+
+	m_arrPropertyInfoDisplay[dwPropertyInfoIndex]->m_arrTooltips.Add(pToolTip);
+	
+Cleanup:
+	return hr;
+}
+
+void CPropertyEditWindow::ResizeChildren() {
+	DWORD cItems = 0;
+	RECT clientRect;
+	GetClientRect(&clientRect);
+	DWORD dwViewWidth = clientRect.right - clientRect.left - 5;
+
+	if (m_arrPropertyInfoDisplay.GetCount() > 0) {
+		LockWindowUpdate();
+	}
+
+	for (size_t i = 0; i < m_arrPropertyInfoDisplay.GetCount(); i++) {
+		// Add an item for the margin;
+		if (i != 0) {
+			cItems++;
+		}
+
+		// Manage the title's position first;
+		m_arrTitles[i]->SetWindowPos(HWND_TOP, ms_MarginWidth, ms_MarginWidth + (cItems * ms_LabelHeight), dwViewWidth, ms_LabelHeight, 0);
+		cItems++;
+
+		PropertyInfoDisplay* pDisplay = m_arrPropertyInfoDisplay.GetAt(i);
+		for (size_t j = 0; j < pDisplay->m_arrLabels.GetCount(); j++) {
+			pDisplay->m_arrLabels.GetAt(j)->SetWindowPos(HWND_TOP, ms_MarginWidth, ms_MarginWidth + (cItems * ms_LabelHeight),
+														 dwViewWidth / 2, ms_LabelHeight, 0);
+
+			pDisplay->m_arrEdits.GetAt(j)->SetWindowPos(HWND_TOP, dwViewWidth / 2 + ms_MarginWidth,
+														ms_MarginWidth + (cItems * ms_LabelHeight), dwViewWidth / 2 - ms_MarginWidth,
+														ms_LabelHeight, 0);
+			cItems++;
+		}
+
+		RECT buttonRect;
+		GetClientRect(&buttonRect);
+		buttonRect.right -= ms_ButtonWidth + ms_MarginWidth + ms_MarginWidth;
+		buttonRect.bottom -= ms_MarginWidth;
+		buttonRect.top = buttonRect.bottom - ms_ButtonHeight;
+		buttonRect.left = buttonRect.right - ms_ButtonWidth;
+
+		m_AddButton.SetWindowPos(HWND_TOP, buttonRect.left, buttonRect.top,
+								 buttonRect.right - buttonRect.left, buttonRect.bottom - buttonRect.top, 0);
+		buttonRect.right += ms_ButtonWidth + ms_MarginWidth;
+		buttonRect.left += ms_ButtonWidth + ms_MarginWidth;
+
+		m_OKButton.SetWindowPos(HWND_TOP, buttonRect.left, buttonRect.right,
+								buttonRect.right - buttonRect.left,
+								buttonRect.bottom - buttonRect.top, 0);
+
+		if (m_arrPropertyInfoDisplay.GetCount() > 0) {
+			LockWindowUpdate(FALSE);
+		}
+	}
+}
