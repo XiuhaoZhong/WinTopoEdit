@@ -65,7 +65,7 @@ protected:
 	HRESULT CreatePropertyEdit(DWORD dwPropertyInfoIndex, CAtlStringW strInitialText, RECT &rectLabel, bool fReadOnly);
 	HRESULT CreatePropertyToolTip(DWORD dwPropertyInfoIndex, HWND hWndParent, CAtlStringW strLabelText, RECT &rectTooltip);
 	void ResizeChildren();
-	CAtlStringW GetTextForVartype(VARTYPE vt);
+	CAtlString GetTextForVartype(VARTYPE vt);
 	LRESULT RelayMessageToTooltipControl(UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 private:
@@ -139,5 +139,5 @@ private:
 
 	HWND m_hPropertyCategoryCombo;
 	HWND m_hPropertyNameCombo;
-	HWND m_PropertyValueEdit;
+	HWND m_hPropertyValueEdit;
 };

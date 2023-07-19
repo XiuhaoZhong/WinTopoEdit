@@ -18,12 +18,12 @@ public: \
 		return pThis->Release(); \
 	} \
 	STDMETHOD(QueryInterface)(REFIID riid, void **ppvObject) { \
-		if (riid == IID_IMFAsyncCallback || riid == IID_IUknown) { \
+		if (riid == IID_IMFAsyncCallback || riid == IID_IUnknown) { \
 			(*ppvObject) = this; \
 			AddRef(); \ 
 			return S_OK; \
 		} \
-		(**ppvObject) = NULL; \
+		(*ppvObject) = NULL; \
 		return E_NOINTERFACE; \
 	} \
 	STDMETHOD(GetParameters)(DWORD *pdwFlags, DWORD *pdwQueue) { \
@@ -39,7 +39,7 @@ public: \
 } m_x##Callback;
 
 #define METHODASYNCCALLBACK(Callback, Parent) \
-	METHODASYNCCALLBACK(Callback, Parent, 0, MFASYNC_CALLBACK_QUEUE_STANDARD)
+	METHODASYNCCALLBACKEX(Callback, Parent, 0, MFASYNC_CALLBACK_QUEUE_STANDARD)
 
 
 // window for video playback
@@ -74,7 +74,7 @@ protected:
 	HRESULT CreatePartialTopology(IMFTopology **ppPartialTopology);
 	HRESULT CreateSource(IMFMediaSource **ppSource);
 	HRESULT BuildTopologyFromSource(IMFTopology *pTopology, IMFMediaSource *pSource);
-	HRESULT CreateRendererForStream(IMFStreamDescriptor *pSD, IMFTopology **ppRenderNode);
+	HRESULT CreateRendererForStream(IMFStreamDescriptor *pSD, IMFTopologyNode **ppRenderNode);
 
 private:
 	LPCWSTR m_szFileName;

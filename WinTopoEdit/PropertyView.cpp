@@ -568,3 +568,113 @@ void CPropertyEditWindow::ResizeChildren() {
 		}
 	}
 }
+
+CAtlString CPropertyAddDialog::GetTextForVartype(VARTYPE vt) {
+	UINT nID = IDS_NO_TYPE;
+
+	switch (vt) {
+	case VT_UI4:
+		nID = IDS_UINT32;
+		break;
+	case VT_UI8:
+		nID = IDS_UINT64;
+		break;
+	case VT_R8:
+		nID = IDS_DOUBLE;
+		break;
+	case VT_CLSID:
+		nID = IDS_GUID;
+		break;
+	case VT_LPWSTR:
+		nID = IDS_STRING;
+		break;
+	case (VT_VECTOR | VT_UI1):
+		nID = IDS_BYTE_ARRAY;
+		break;
+	case VT_UNKNOWN:
+		nID = IDS_IUNKNOWN;
+		break;
+	}
+
+	return LoadAtlString(nID);
+}
+
+/*********************************\
+	*  CPropertyAddDialog  *
+
+\*********************************/
+void CPropertyAddDialog::AddPropertyCategory(CAtlString strCategory, TED_ATTRIBUTE_CATEGORY Category, DWORD dwIndex) {
+	m_arrCategories.Add(strCategory);
+	m_arrCategoryIDs.Add(Category);
+	m_arrCategoryIndex.Add(dwIndex);
+}
+
+LRESULT CPropertyAddDialog::OnInitDialog(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled) {
+	m_hPropertyCategoryCombo = GetDlgItem(IDC_PROPERTYCATEGORY);
+	m_hPropertyNameCombo = GetDlgItem(IDC_PROPERTYNAME);
+	m_hPropertyValueEdit = GetDlgItem(IDC_PROPERTYVALUE);
+
+	for (size_t i = 0; i < m_arrCategories.GetCount(); i++) {
+		::SendMessage(m_hPropertyCategoryCombo, CB_ADDSTRING, 0, (LPARAM)m_arrCategories.GetAt(i).GetString());
+	}
+	::SendMessage(m_hPropertyCategoryCombo, CB_SETCURSEL, 0, 0);
+
+	TED_ATTRIBUTE_CATEGORY DesiredCategory = TED_ATTRIBUTE_CATEGORY_NONE;
+	if (m_arrCategoryIDs.GetCount() >= 1) {
+		DesiredCategory = m_arrCategoryIDs.GetAt(0);
+	}
+
+	for (DWORD i = 0; i < TEDGetAttributeListLength(); i++) {
+		if (TEDGetAttributeCategory(i) == DesiredCategory) {
+			::SendMessage(m_hPropertyNameCombo, CB_ADDSTRING, 0, (LPARAM)TEDGetAttributeName(i));
+		}
+	}
+
+	return 0;
+}
+
+LRESULT CPropertyAddDialog::OnOK(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	HRESULT hr;
+	LPWSTR strCombo = NULL;
+	LPWSTR strEdit = NULL;
+
+	DWORD dwSelectionIndex = (DWORD)::SendMessage(m_hPropertyCategoryCombo, CB_GETCURSEL, 0, 0);
+	if (dwSelectionIndex > m_arrCategoryIndex.GetCount()) {
+		dwSelectionIndex = 0;
+	}
+	m_dwChosenCategory = m_arrCategoryIndex.GetAt(dwSelectionIndex);
+
+	int comboLength = ::GetWindowTextLength(m_hPropertyNameCombo);
+	strCombo = new WCHAR[comboLength + 1];
+	CHECK_ALLOC(strCombo);
+	::GetWindowText(m_hPropertyNameCombo, strCombo, comboLength + 1);
+	m_strChosenProperty = CAtlStringW(strCombo);
+
+	int editLength = ::GetWindowTextLength(m_hPropertyValueEdit);
+	strEdit = new WCHAR[editLength + 1];
+	CHECK_ALLOC(strEdit);
+	::GetWindowText(m_hPropertyValueEdit, strEdit, editLength + 1);
+	m_strValue = CAtlStringW(strEdit);
+
+Cleanup:
+	delete[] strCombo;
+	delete[] strEdit;
+
+	EndDialog(IDOK);
+
+	return hr;
+}
+
+LRESULT CPropertyAddDialog::OnCategoryChange(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL &bHandled) {
+	DWORD dwSelectionIndex = (DWORD)::SendMessage(m_hPropertyCategoryCombo, CB_GETCURSEL, 0, 0);
+
+	TED_ATTRIBUTE_CATEGORY DesiredCategory = m_arrCategoryIDs.GetAt(dwSelectionIndex);
+	::SendMessage(m_hPropertyNameCombo, CB_RESETCONTENT, 0, 0);
+	for (DWORD i = 0; i < TEDGetAttributeListLength(); i++) {
+		if (TEDGetAttributeCategory(i) == DesiredCategory) {
+			::SendMessage(m_hPropertyNameCombo, CB_ADDSTRING, 0, (LPARAM)TEDGetAttributeName(i));
+		}
+	}
+
+	return 0;
+}

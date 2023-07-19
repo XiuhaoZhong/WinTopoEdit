@@ -1,3 +1,5 @@
+#include "stdafx.h"
+
 #include "CTedPlayer.h"
 
 #include <mferror.h>
@@ -61,5 +63,37 @@ HRESULT CTedMediaFileRenderer::CreateSource(IMFMediaSource **ppSource) {
 
 Cleanup:
 	return hr;
+}
 
+// Given a source, connect each stream to a renderer for its media type
+HRESULT CTedMediaFileRenderer::BuildTopologyFromSource(IMFTopology* pTopology, IMFMediaSource* pSource) {
+	HRESULT hr;
+
+	CComPtr<IMFPresentationDescriptor> spPD;
+
+	IFC(pSource->CreatePresentationDescriptor(&spPD));
+
+	DWORD cSourceStreams = 0;
+	IFC(spPD->GetStreamDescriptorCount(&cSourceStreams));
+	for (DWORD i = 0; i < cSourceStreams; i++) {
+		CComPtr<IMFStreamDescriptor> spSD;
+		CComPtr<IMFTopologyNode> spNode;
+		CComPtr<IMFTopologyNode> spRendererNode;
+		BOOL fSelected = FALSE;
+
+		IFC(spPD->GetStreamDescriptorByIndex(i, &fSelected, &spSD));
+
+		IFC(MFCreateTopologyNode(MF_TOPOLOGY_SOURCESTREAM_NODE, &spNode));
+		IFC(spNode->SetUnknown(MF_TOPONODE_SOURCE, pSource));
+		IFC(spNode->SetUnknown(MF_TOPONODE_PRESENTATION_DESCRIPTOR, spPD));
+		IFC(spNode->SetUnknown(MF_TOPONODE_STREAM_DESCRIPTOR, spSD));
+		IFC(pTopology->AddNode(spNode));
+
+		IFC(CreateRendererForStream(spSD, &spRendererNode));
+		IFC(spNode->ConnectOutput(0, spRendererNode, 0));
+		IFC(pTopology->AddNode(spRendererNode));
+	}
+
+Cleanup:
+	return hr;
 }
