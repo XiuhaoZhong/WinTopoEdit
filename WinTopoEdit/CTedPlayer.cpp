@@ -1,9 +1,9 @@
 #include "stdafx.h"
 
-#include "CTedPlayer.h"
-
 #include <mferror.h>
 #include <initguid.h>
+
+#include "CTedPlayer.h"
 
 EXTERN_GUID(CLSID_CResamplerMediaObject, 0xf447b69e, 0x1884, 0x4a7e, 0x80, 0x55, 0x34, 0x6f, 0x74, 0xd6, 0xed, 0xb3);
 
@@ -96,4 +96,150 @@ HRESULT CTedMediaFileRenderer::BuildTopologyFromSource(IMFTopology* pTopology, I
 
 Cleanup:
 	return hr;
+}
+
+// Create a renderer for the media type on the given stream descriptor
+HRESULT CTedMediaFileRenderer::CreateRendererForStream(IMFStreamDescriptor *pSD, IMFTopologyNode** ppRendererNode) {
+	HRESULT hr;
+
+	CComPtr<IMFMediaTypeHandler> spMediaTypeHandler;
+	CComPtr<IMFActivate> spRendererActivate;
+	CComPtr<IMFMediaSink> spRendererSink;
+	CComPtr<IMFStreamSink> spRendererStreamSink;
+
+	IMFTopologyNode *pRendererNode;
+	GUID gidMajorType;
+
+	IFC(MFCreateTopologyNode(MF_TOPOLOGY_OUTPUT_NODE, &pRendererNode));
+	IFC(pSD->GetMediaTypeHandler(&spMediaTypeHandler));
+	IFC(spMediaTypeHandler->GetMajorType(&gidMajorType));
+
+	if (gidMajorType == MFMediaType_Audio) {
+		IFC(MFCreateAudioRendererActivate(&spRendererActivate));
+		IFC(spRendererActivate->ActivateObject(IID_IMFMediaSink, (void **)&spRendererSink));
+		IFC(spRendererSink->GetStreamSinkById(0, &spRendererStreamSink));
+		IFC(pRendererNode->SetObject(spRendererStreamSink));
+	} else if (gidMajorType == MFMediaType_Video) {
+		HWND hVideoWindow;
+		IFC(m_spVideoWindowHandler->GetVideoWindow((LONG_PTR *)&hVideoWindow));
+		IFC(MFCreateVideoRendererActivate(hVideoWindow, &spRendererActivate));
+		IFC(spRendererActivate->ActivateObject(IID_IMFMediaSink, (void **)&spRendererSink));
+		IFC(pRendererNode->SetObject(spRendererStreamSink));
+	} else {
+		// Don't have renderers for any other major types
+	}
+
+	*ppRendererNode = pRendererNode;
+
+Cleanup:
+	return hr;
+}
+
+///////////////////////////////////////////////////////////////
+//
+CTedPlayer::CTedPlayer(CTedMediaEventHandler* pMediaEventHandler, IMFContentProtectionManager* pCPM)
+	: m_cRef(1)
+	, m_pMediaEventHandler(pMediaEventHandler)
+	, m_pCPM(pCPM)
+	, m_bIsPlaying(false)
+	, m_bIsPaused(false) 
+	, m_fTopologySet(false)
+	, m_LastSeqID(0)
+	, m_hnsMediastartOffset(0)
+	, m_fPendingClearCustomTopoloader(false)
+	, m_fPendingProtectedCustomTopoloader(false) {
+	m_pCPM->AddRef();
+}
+
+CTedPlayer::~CTedPlayer() {
+	HRESULT hr;
+
+	if (m_pCPM) {
+		m_pCPM->Release();
+	}
+
+	for (size_t i = 0; i < m_aTopologies.GetCount(); i++) {
+		CComPtr<IMFCollection> spSourceNodeCollection;
+		IMFTopology* pTopology = m_aTopologies.GetAt(i);
+
+		hr = pTopology->GetSourceNodeCollection(&spSourceNodeCollection);
+		if (FAILED(hr)) {
+			pTopology->Release();
+			continue ;
+		}
+
+		DWORD cElements = 0;
+		spSourceNodeCollection->GetElementCount(&cElements);
+		for (DWORD j = 0; j < cElements; j++) {
+			CComPtr<IUnknown> spSourceNodeUnk;
+			CComPtr<IMFTopologyNode> spSourceNode;
+			CComPtr<IMFMediaSource> spSource;
+
+			hr = spSourceNodeCollection->GetElement(j, &spSourceNodeUnk);
+			if (FAILED(hr)) {
+				continue ;
+			}
+
+			hr = spSourceNodeUnk->QueryInterface(IID_IMFTopologyNode, (void **)&spSourceNode);
+			if (FAILED(hr)) {
+				continue ;
+			}
+
+			hr = spSourceNode->GetUnknown(MF_TOPONODE_SOURCE, IID_IMFMediaSource, (void **)&spSource);
+			if (FAILED(hr)) {
+				continue ;
+			}
+
+			spSource->Shutdown();
+		}
+
+		CComPtr<IMFCollection> spOutputNodeCollection;
+		hr = pTopology->GetOutputNodeCollection(&spOutputNodeCollection);
+		if (FAILED(hr)) {
+			pTopology->Release();
+			continue ;
+		}
+
+		cElements = 0;
+		spOutputNodeCollection->GetElementCount(&cElements);
+		for (DWORD j = 0; j < cElements; j++) {
+			CComPtr<IUnknown> spSinkNodeUnk;
+			CComPtr<IMFTopologyNode> spSinkNode;
+			CComPtr<IUnknown> spStreamSinkUnk;
+			CComPtr<IMFStreamSink> spStreamSink;
+			CComPtr<IMFMediaSink> spSink;
+
+			hr = spOutputNodeCollection->GetElement(j, &spSinkNodeUnk);
+			if (FAILED(hr)) {
+				continue ;
+			}
+
+			hr = spSinkNodeUnk->QueryInterface(IID_IMFTopologyNode, (void **)&spSinkNode);
+			if (FAILED(hr)) {
+				continue;
+			}
+
+			hr = spSinkNode->GetObject(&spStreamSinkUnk);
+			if (FAILED(hr)) {
+				continue;
+			}
+
+			hr = spStreamSinkUnk->QueryInterface(IID_IMFStreamSink, (void **)&spSink);
+			if (FAILED(hr)) {
+				continue;
+			}
+
+			spSink->Shutdown();
+		}
+
+		pTopology->Release();
+	}
+
+	if (m_spClearSeesion) {
+		m_spClearSeesion->Shutdown();
+	}
+
+	if (m_spProtectedSession) {
+		m_spProtectedSession->Shutdown();
+	}
 }

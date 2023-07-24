@@ -20,8 +20,8 @@ public: \
 	STDMETHOD(QueryInterface)(REFIID riid, void **ppvObject) { \
 		if (riid == IID_IMFAsyncCallback || riid == IID_IUnknown) { \
 			(*ppvObject) = this; \
-			AddRef(); \ 
-			return S_OK; \
+			AddRef(); \
+            return S_OK; \
 		} \
 		(*ppvObject) = NULL; \
 		return E_NOINTERFACE; \
@@ -40,7 +40,6 @@ public: \
 
 #define METHODASYNCCALLBACK(Callback, Parent) \
 	METHODASYNCCALLBACKEX(Callback, Parent, 0, MFASYNC_CALLBACK_QUEUE_STANDARD)
-
 
 // window for video playback
 class CTedVideoWindow : public CWindowImpl<CTedVideoWindow> {
@@ -175,4 +174,3 @@ private:
 	bool m_fPendingProtectedCustomTopoloader;
 	
 };
-
