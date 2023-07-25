@@ -57,23 +57,23 @@
 #define IDS_LICENSE_ACQUIRED            542
 #define IDS_LICENSE_ACQUIRED_FAILED     543
 
-#define IDS_ERROR       550
-#define IDS_UINT32      551
-#define IDS_UINT64      552
-#define IDS_DOUBLE      553
-#define IDS_GUID        554
-#define IDS_STRING      555
-#define IDS_BYTE_ARRAY  556
-#define IDS_IUNKNOWN    557
-#define IDS_NO_TYPE     558
+#define IDS_ERROR						550
+#define IDS_UINT32						551
+#define IDS_UINT64						552
+#define IDS_DOUBLE						553
+#define IDS_GUID						554
+#define IDS_STRING						555
+#define IDS_BYTE_ARRAY					556
+#define IDS_IUNKNOWN					557
+#define IDS_NO_TYPE						558
 
-#define IDS_VIDEO_PLAYBACK  560
-#define IDS_WDW_NAME        561
-#define IDS_WDW_TOPOVIEW    562
-#define IDS_DOCK            563
-#define IDS_SPLITTER        564
-#define IDS_SLIDER          565
-#define IDS_PROP_VIEW       566
+#define IDS_VIDEO_PLAYBACK				560
+#define IDS_WDW_NAME					561
+#define IDS_WDW_TOPOVIEW				562
+#define IDS_DOCK						563
+#define IDS_SPLITTER					564
+#define IDS_SLIDER						565
+#define IDS_PROP_VIEW					566
 
 #define IDS_E_LICENSE_URL_BROWSER       570
 #define IDS_E_SAVE_PROP                 571
@@ -110,25 +110,25 @@
 #define IDS_E_TRANSCODE_PROFILES        602
 #define IDS_E_TRANSCODE_PROFILE         603
 
-#define IDS_MFT_CUSTOM      610
-#define IDS_TOPO_NOT_SAVED  612
-#define IDS_TOPO_NEW        613
+#define IDS_MFT_CUSTOM					610
+#define IDS_TOPO_NOT_SAVED				612
+#define IDS_TOPO_NEW					613
 
-#define IDS_FILE_XML        630
-#define IDS_FILE_SAVE       631
-#define IDS_FILE_LOAD       632
-#define IDS_FILE_MEDIA      633
-#define IDS_FILE_SELECT     634
+#define IDS_FILE_XML					630
+#define IDS_FILE_SAVE					631
+#define IDS_FILE_LOAD					632
+#define IDS_FILE_MEDIA					633
+#define IDS_FILE_SELECT					634
 
-#define IDS_CATEGORY_AUDIO_DECODERS 640
-#define IDS_CATEGORY_AUDIO_EFFECTS  641
-#define IDS_CATEGORY_AUDIO_ENCODERS 642
-#define IDS_CATEGORY_DEMUX          643
-#define IDS_CATEGORY_MUX            644
-#define IDS_CATEGORY_OTHER          645
-#define IDS_CATEGORY_VIDEO_DECODERS 646
-#define IDS_CATEGORY_VIDEO_EFFECTS  647
-#define IDS_CATEGORY_VIDEO_ENCODERS 648
+#define IDS_CATEGORY_AUDIO_DECODERS		640
+#define IDS_CATEGORY_AUDIO_EFFECTS		641
+#define IDS_CATEGORY_AUDIO_ENCODERS		642
+#define IDS_CATEGORY_DEMUX				643
+#define IDS_CATEGORY_MUX				644
+#define IDS_CATEGORY_OTHER				645
+#define IDS_CATEGORY_VIDEO_DECODERS		646
+#define IDS_CATEGORY_VIDEO_EFFECTS		647
+#define IDS_CATEGORY_VIDEO_ENCODERS		648
 
 #define IDC_TRANSFORMLIST               1019
 #define IDC_TRANSFORMTREE               1021

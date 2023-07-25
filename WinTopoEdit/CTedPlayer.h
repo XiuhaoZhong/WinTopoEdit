@@ -153,7 +153,7 @@ private:
 	IMFContentProtectionManager *m_pCPM;
 
 	CComPtr<IMFTopology> m_spFullTopology;
-	CComPtr<IMFPresentationClock> *m_spSessionClock;
+	CComPtr<IMFPresentationClock> m_spSessionClock;
 
 	MFSequencerElementId m_LastSeqID;
 

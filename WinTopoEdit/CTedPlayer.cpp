@@ -243,3 +243,478 @@ CTedPlayer::~CTedPlayer() {
 		m_spProtectedSession->Shutdown();
 	}
 }
+
+HRESULT CTedPlayer::InitClear() {
+	HRESULT hr;
+
+	if (m_spSession) {
+		if (m_bIsPlaying) {
+			m_bIsPlaying = false;
+			m_spSession->Stop();
+		}
+
+		m_spSession.Release();
+	}
+
+	if (m_fPendingClearCustomTopoloader && m_spClearSeesion.p) {
+		m_spClearSeesion->Shutdown();
+		m_spClearSeesion.Release();
+	}
+
+	if (m_spClearSeesion.p == NULL) {
+		CComPtr<IMFAttributes> spConfiguration = NULL;
+		if (m_fPendingClearCustomTopoloader && GUID_NULL != m_gidCustomTopoloader) {
+			IFC(MFCreateAttributes(&spConfiguration, 1));
+			IFC(spConfiguration->SetGUID(MF_SESSION_TOPOLOADER, m_gidCustomTopoloader));
+		}
+
+		IFC(MFCreateMediaSession(spConfiguration, &m_spClearSeesion));
+		IFC(m_spClearSeesion->BeginGetEvent(&m_xOnClearSessionEvent, NULL));
+
+		m_fPendingClearCustomTopoloader = false;
+	}
+
+	m_spSession = m_spClearSeesion;
+	IFC(InitFromSession());
+
+Cleanup:
+	return hr;
+}
+
+HRESULT CTedPlayer::InitProtected() {
+	HRESULT hr;
+
+	if (m_spSession) {
+		if (m_bIsPlaying) {
+			m_bIsPlaying = false;
+			m_spSession->Stop();
+		}
+
+		m_spSession.Release();
+	}
+
+	if (m_fPendingProtectedCustomTopoloader && m_spProtectedSession.p) {
+		m_spProtectedSession->Shutdown();
+		m_spProtectedSession.Release();
+	}
+
+	if (m_spProtectedSession.p == NULL) {
+		CComPtr<IMFAttributes> spAttr;
+		IFC(MFCreateAttributes(&spAttr, 1));
+		IFC(spAttr->SetUnknown(MF_SESSION_CONTENT_PROTECTION_MANAGER, m_pCPM));
+
+		if (m_fPendingProtectedCustomTopoloader && GUID_NULL == m_gidCustomTopoloader) {
+			IFC(spAttr->SetGUID(MF_SESSION_TOPOLOADER, m_gidCustomTopoloader));
+		}
+
+		IFC(MFCreatePMPMediaSession(0, spAttr, &m_spProtectedSession, NULL));
+		IFC(m_spProtectedSession->BeginGetEvent(&m_xOnProtectedSessionEvent, NULL));
+
+		m_fPendingProtectedCustomTopoloader = false;
+	}
+
+	m_spSession = m_spProtectedSession;
+	IFC(InitFromSession());
+
+Cleanup:
+	return hr;
+}
+
+// AddRef and Release for callbacks only; not functional
+LONG CTedPlayer::AddRef() {
+	return m_cRef;
+}
+
+LONG CTedPlayer::Release() {
+	return m_cRef;
+}
+
+HRESULT CTedPlayer::Reset() {
+	HRESULT hr;
+
+	IFC(m_spSession->ClearTopologies());
+
+Cleanup:
+	return hr;
+}
+
+HRESULT CTedPlayer::SetTopology(CComPtr<IMFTopology> pPartialTopo, BOOL fTranscode) {
+	HRESULT hr;
+
+	assert(pPartialTopo != NULL);
+	assert(m_spSession != NULL);
+
+	m_aTopologies.Add(pPartialTopo);
+	m_aTopologies.GetAt(m_aTopologies.GetCount() - 1)->AddRef();
+
+	// Due to a bug, the topoloader cannot correctly resolve a resampler already existing
+	// in the topology, and will just insert new one. Work around this by removing the 
+	// resampler
+	IFC(RemoveResamplerNode(pPartialTopo));
+
+	if (m_spSession.p == NULL) {
+		m_spSession.Release();
+	}
+
+	m_hnsMediastartOffset = INT64_MAX;
+
+	WORD cNodes;
+	IFC(pPartialTopo->GetNodeCount(&cNodes));
+	for (WORD i = 0; i < cNodes; i++) {
+		CComPtr<IMFTopologyNode> spNode;
+		MF_TOPOLOGY_TYPE tidType;
+
+		IFC(pPartialTopo->GetNode(i, &spNode));
+		IFC(spNode->GetNodeType(&tidType));
+
+		// We need to find the source node so we can get the IMFMediasource for this playback.
+		if (MF_TOPOLOGY_SOURCESTREAM_NODE == tidType) {
+			if (!m_spSource.p) {
+				IFC(spNode->GetUnknown(MF_TOPONODE_SOURCE, IID_IMFMediaSource, (void **)&m_spSource));
+			}
+
+			MFTIME hnsMediastart = 0;
+			(void)spNode->GetUINT64(MF_TOPONODE_MEDIASTART, (UINT64 *)&hnsMediastart);
+			if (hnsMediastart < m_hnsMediastartOffset) {
+				m_hnsMediastartOffset = hnsMediastart;
+			}
+		}
+	}
+
+	// Set topology attributes to enable new MF features. HWMODE_USE_HARDWARE allows topoedit
+	// to pick up hardware MFTs for decoding. DXVA_FULL allows topoedit to enable full DXVA 
+	// resolution for the topology -- in MFv1, only decoders automatically inserted ny the
+	// topoloader and directly connected to the EVR received a D3D manager message.
+	IFC(pPartialTopo->SetUINT32(MF_TOPOLOGY_HARDWARE_MODE, MFTOPOLOGY_HWMODE_USE_HARDWARE));
+	IFC(pPartialTopo->SetUINT32(MF_TOPOLOGY_DXVA_MODE, MFTOPOLOGY_DXVA_FULL));
+
+	if (m_spSource.p == NULL) {
+		IFC(MF_E_NOT_FOUND);
+	} else {
+		m_fIsTranscoding = fTranscode;
+		IFC(m_spSession->SetTopology(MFSESSION_SETTOPOLOGY_IMMEDIATE, pPartialTopo));
+	}
+
+	m_fReceivedTime = false;
+
+Cleanup:
+	return hr;
+}
+
+HRESULT CTedPlayer::Start() {
+	HRESULT hr;
+	PROPVARIANT var;
+
+	PropVariantInit(&var);
+
+	LONGLONG hnsSeek = (m_bIsPaused) ? PRESENTATION_CURRENT_POSITION : 0;
+	if (hnsSeek == PRESENTATION_CURRENT_POSITION) {
+		var.vt = VT_EMPTY;
+	} else {
+		var.vt = VT_I8;
+		var.hVal.QuadPart = hnsSeek;
+	}
+
+	hr = m_spSession->Start(NULL, &var);
+	m_bIsPaused = false;
+
+	PropVariantClear(&var);
+
+	return hr;
+}
+
+HRESULT CTedPlayer::Stop() {
+	HRESULT hr;
+
+	IFC(m_spSession->Stop());
+
+	m_bIsPlaying = false;
+Cleanup:
+	return hr;
+}
+
+HRESULT CTedPlayer::Pause() {
+	HRESULT hr;
+
+	m_bIsPaused = true;
+	IFC(m_spSession->Pause());
+
+Cleanup:
+	return hr;
+}
+
+HRESULT CTedPlayer::PlayFrom(MFTIME time) {
+	HRESULT hr = S_OK;
+	PROPVARIANT var;
+	PropVariantInit(&var);
+
+	if (PRESENTATION_CURRENT_POSITION == time) {
+		var.vt = VT_EMPTY;
+	} else {
+		var.vt = VT_I8;
+		var.hVal.QuadPart = time;
+	}
+
+	hr = m_spSession->Start(NULL, &var);
+
+	PropVariantClear(&var);
+
+	return hr;
+}
+
+HRESULT CTedPlayer::GetDuration(MFTIME& hnsTime) {
+	HRESULT hr = S_OK;
+	IMFPresentationDescriptor *pPD = NULL;
+
+	if (m_spSource.p != NULL) {
+		IFC(m_spSource->CreatePresentationDescriptor(&pPD));
+		IFC(pPD->GetUINT64(MF_PD_DURATION, (UINT64 *)&hnsTime));
+	} else {
+		hr = E_POINTER;
+	}
+
+Cleanup:
+	if (pPD) {
+		pPD->Release();
+	}
+
+	return hr;
+}
+
+HRESULT CTedPlayer::GetFullTopology(IMFTopology **ppFullTopo) {
+	HRESULT hr = S_OK;
+
+	CComPtr<IMFGetService> spGetService;
+
+	if (m_spFullTopology) {
+		*ppFullTopo = m_spFullTopology;
+		(*ppFullTopo)->AddRef();
+	} else {
+		hr = m_spSession->GetFullTopology(MFSESSION_GETFULLTOPOLOGY_CURRENT, 0, ppFullTopo);
+	}
+
+	return hr;
+}
+
+void CTedPlayer::OnClearSessionEvent(IMFAsyncResult *pResult) {
+	HRESULT hr;
+	CComPtr<IMFMediaEvent> spEvent;
+
+	IFC(m_spClearSeesion->EndGetEvent(pResult, &spEvent));
+
+	if (m_spSession.p == m_spClearSeesion.p) {
+		IFC(HandleEvent(spEvent));
+	}
+
+	IFC(m_spClearSeesion->BeginGetEvent(&m_xOnClearSessionEvent, NULL));
+
+Cleanup:
+	if (FAILED(hr)) {
+		m_pMediaEventHandler->NotifyEventError(hr);
+	}
+}
+
+void CTedPlayer::OnProtectedSessionEvent(IMFAsyncResult *pResult) {
+	HRESULT hr;
+
+	CComPtr<IMFMediaEvent> spEvent;
+
+	IFC(m_spProtectedSession->EndGetEvent(pResult, &spEvent));
+	if (m_spSession.p == m_spProtectedSession.p) {
+		IFC(HandleEvent(spEvent));
+	}
+
+	IFC(m_spProtectedSession->BeginGetEvent(&m_xOnProtectedSessionEvent, NULL));
+
+Cleanup:
+	if (FAILED(hr)) {
+		m_pMediaEventHandler->NotifyEventError(hr);
+	}
+}
+
+HRESULT CTedPlayer::HandleEvent(IMFMediaEvent *pEvent) {
+	HRESULT hr = S_OK;
+	HRESULT hrEvent = S_OK;
+	MediaEventType met;
+	PROPVARIANT var;
+
+	PropVariantInit(&var);
+
+	IFC(pEvent->GetType(&met));
+	IFC(pEvent->GetStatus(&hrEvent));
+	IFC(pEvent->GetValue(&var));
+
+	switch (met) {
+	case MESessionStarted:
+		IFC(HandleSessionStarted(pEvent));
+		m_bIsPlaying = true;
+		break;
+	case MESessionEnded:
+		m_bIsPlaying = false;
+		if (m_fIsTranscoding) {
+			m_spSession->Close();
+		}
+		break;
+	case MESessionTopologySet:
+		if (SUCCEEDED(hrEvent)) {
+			m_fTopologySet = true;
+			m_bIsPaused = false;
+		}
+
+		m_spFullTopology.Release();
+		var.punkVal->QueryInterface(IID_IMFTopology, (void **)&m_spFullTopology);
+		break;
+	case MESessionNotifyPresentationTime:
+		IFC(HandleNotifyPresentationTime(pEvent));
+		break;
+	}
+
+	m_pMediaEventHandler->HandleMediaEvent(pEvent);
+
+Cleanup:
+	PropVariantClear(&var);
+	return hr;
+}
+
+HRESULT CTedPlayer::HandleSessionStarted(IMFMediaEvent *pEvent) {
+	MFTIME hnsTopologyPresentationOffset;
+
+	if (SUCCEEDED(pEvent->GetUINT64(MF_EVENT_PRESENTATION_TIME_OFFSET,
+		(UINT64 *)&hnsTopologyPresentationOffset))) {
+		m_hnsOffsetTime = hnsTopologyPresentationOffset;
+	}
+
+	return S_OK;
+}
+
+HRESULT CTedPlayer::HandleNotifyPresentationTime(IMFMediaEvent *pEvent) {
+	HRESULT hr = S_OK;
+
+	IFC(pEvent->GetUINT64(MF_EVENT_START_PRESENTATION_TIME, (UINT64 *)&m_hnsStartTime));
+	IFC(pEvent->GetUINT64(MF_EVENT_PRESENTATION_TIME_OFFSET, (UINT64 *)&m_hnsOffsetTime));
+	IFC(pEvent->GetUINT64(MF_EVENT_START_PRESENTATION_TIME_AT_OUTPUT, (UINT64 *)&m_hnsStartTimeAtOutput));
+
+	m_fReceivedTime = true;
+
+Cleanup:
+	return hr;
+}
+
+bool CTedPlayer::IsPlaying() const {
+	return m_bIsPlaying;
+}
+
+bool CTedPlayer::IsPause() const {
+	return m_bIsPaused;
+}
+
+bool CTedPlayer::IsTopologySet() const {
+	return m_fTopologySet;
+}
+
+void CTedPlayer::SetCustomTopoloader(GUID gidTopoloader) {
+	m_gidCustomTopoloader = gidTopoloader;
+	m_fPendingClearCustomTopoloader = true;
+	m_fPendingProtectedCustomTopoloader = true;
+}
+
+HRESULT CTedPlayer::GetTime(MFTIME *phnsTime) {
+	HRESULT hr = S_OK;
+
+	IFC(m_spSessionClock->GetTime(phnsTime));
+
+	// To get UI time, we need to apply the appropriate adjustment
+	// to Presentation Clock time.
+	if (m_fReceivedTime) {
+		*phnsTime -= m_hnsOffsetTime;
+	}
+
+	*phnsTime += m_hnsMediastartOffset;
+
+Cleanup:
+	return hr;
+}
+
+HRESULT CTedPlayer::GetRateBounds(MFRATE_DIRECTION eDirection, float *pflSlowest, float *pflFastest) {
+	HRESULT hr = S_OK;
+	CComPtr<IMFRateSupport> spRateSupport;
+
+	assert(pflSlowest != NULL);
+	assert(pflFastest != NULL);
+
+	IFC(MFGetService(m_spSession, MF_RATE_CONTROL_SERVICE, IID_IMFRateSupport, (void **)&spRateSupport));
+
+	IFC(spRateSupport->GetSlowestRate(eDirection, FALSE, pflSlowest));
+	IFC(spRateSupport->GetFastestRate(eDirection, FALSE, pflFastest));
+
+Cleanup:
+	return hr;
+}
+
+HRESULT CTedPlayer::SetRate(float flRate) {
+	HRESULT hr = S_OK;
+	CComPtr<IMFRateControl> spRateControl = NULL;
+
+	IFC(MFGetService(m_spSession, MF_RATE_CONTROL_SERVICE, IID_IMFRateControl, (void **)&spRateControl));
+	IFC(spRateControl->SetRate(FALSE, flRate));
+
+Cleanup:
+	return hr;
+}
+
+HRESULT CTedPlayer::GetCapabilities(DWORD *pdwCaps) {
+	return m_spSession->GetSessionCapabilities(pdwCaps);
+}
+
+HRESULT CTedPlayer::InitFromSession() {
+	HRESULT hr = S_OK;
+	CComPtr<IMFClock> spClock;
+
+	if (m_spSessionClock.p) {
+		m_spSessionClock.Release();
+	}
+
+	IFC(Reset());
+	IFC(m_spSession->GetClock(&spClock));
+	IFC(spClock->QueryInterface(IID_IMFPresentationClock, (void **)&m_spSessionClock));
+
+	m_bIsPaused = false;
+
+Cleanup:
+	return hr;
+}
+
+HRESULT CTedPlayer::RemoveResamplerNode(IMFTopology *pTopology) {
+	HRESULT hr = S_OK;
+
+	WORD cNodes;
+	IFC(pTopology->GetNodeCount(&cNodes));
+
+	for (WORD i = 0; i < cNodes; i++) {
+		CComPtr<IMFTopologyNode> spNode;
+		IFC(pTopology->GetNode(i, &spNode));
+
+		GUID gidTransformID;
+		hr = spNode->GetGUID(MF_TOPONODE_TRANSFORM_OBJECTID, &gidTransformID);
+		if (SUCCEEDED(hr) && CLSID_CResamplerMediaObject == gidTransformID) {
+			CComPtr<IMFTopologyNode> spUpstreamNode;
+			DWORD dwUpstreamIndex;
+			CComPtr<IMFTopologyNode> spDownstreamNode;
+			DWORD dwDownstreamIndex;
+
+			IFC(spNode->GetInput(0, &spUpstreamNode, &dwUpstreamIndex));
+			IFC(spNode->GetOutput(0, &spDownstreamNode, &dwDownstreamIndex));
+			IFC(spUpstreamNode->ConnectOutput(dwUpstreamIndex, spDownstreamNode, dwDownstreamIndex));
+
+			IFC(pTopology->RemoveNode(spNode));
+			IFC(pTopology->GetNodeCount(&cNodes));
+
+			i--;
+		}
+
+		hr = S_OK;
+	}
+
+Cleanup:
+	return hr;
+}
