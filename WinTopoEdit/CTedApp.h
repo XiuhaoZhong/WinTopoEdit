@@ -177,7 +177,6 @@ private:
 };
 
 
-
 class CTedApp : public CWindowImpl<CTedApp> {
 public:
 	CTedApp();

@@ -683,7 +683,7 @@ LRESULT CTedApp::OnCreate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandle
 	CHECK_ALLOC(m_pPropertyController);
 	m_pPropertyController->AddRef();
 
-	IFC(TEDCreateTopoViewer(m_pVideoWindowHandler, m_pPropertyController, m_pTopoEventHandler, *m_pTopoView));
+	IFC(TEDCreateTopoViewer(m_pVideoWindowHandler, m_pPropertyController, m_pTopoEventHandler, &m_pTopoView));
 	IFC(m_pTopoView->CreateTopoWindow(LoadAtlString(IDS_WDW_TOPOVIEW), WS_CHILD | WS_VISIBLE | WS_HSCROLL | WS_VSCROLL,
 		rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top,
 		(LONG_PTR)m_pDock->m_hWnd,
