@@ -143,6 +143,7 @@
     <ClCompile Include="CTrackbarControl.cpp" />
     <ClCompile Include="PropertyView.cpp" />
     <ClCompile Include="tedtranscode.cpp" />
+    <ClCompile Include="tedVidWin.cpp" />
     <ClCompile Include="WinTopo.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -155,12 +156,19 @@
     <ClInclude Include="CTedPlayer.h" />
     <ClInclude Include="CTedTransformDialog.h" />
     <ClInclude Include="CTrackbarControl.h" />
+    <ClInclude Include="Logger.h" />
     <ClInclude Include="MFErrorHandler.h" />
     <ClInclude Include="PropertyView.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="tedobj.h" />
     <ClInclude Include="tedtranscode.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="WinTopoEdit.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Xml Include="TranscodeProfiles.xml" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
